@@ -217,6 +217,9 @@ struct LoginView: View {
             }
         }
         .ignoresSafeArea()
+        // Login screen is always dark — forces white status bar icons
+        // regardless of the system-wide appearance preference
+        .preferredColorScheme(.dark)
         .animation(.spring(duration: 0.3), value: errorMessage)
         .sheet(isPresented: $showTokenHelp) {
             TokenHelpView()

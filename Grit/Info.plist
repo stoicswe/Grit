@@ -18,5 +18,41 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+
+	<!-- Portrait-only on iPhone -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+
+	<!-- Force full-screen (no split-view / slide-over on iPad, future-proof for iPhone windowing) -->
+	<key>UIRequiresFullScreen</key>
+	<true/>
+
+	<!-- Let each SwiftUI view control the status bar style via preferredColorScheme -->
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+
+	<!-- Default to light content (white icons) — LoginView overrides this to dark -->
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleDefault</string>
+
+	<!-- Transparent launch screen so there is no flash of white -->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+
+	<!-- Allow networking to custom GitLab instances over HTTP if needed -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+
+	<!-- FaceID prompt for keychain access -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>Authenticate to access your saved GitLab credentials.</string>
 </dict>
 </plist>
