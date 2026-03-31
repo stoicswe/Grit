@@ -197,7 +197,7 @@ struct RepositoryDetailView: View {
             settingsStore.toggleProjectSubscription(repository.id)
         } label: {
             Image(systemName: isSubscribed ? "bell.fill" : "bell")
-                .foregroundStyle(isSubscribed ? .accentColor : .primary)
+                .foregroundStyle(isSubscribed ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
         }
     }
 }
@@ -251,7 +251,7 @@ struct BranchPickerSheet: View {
                         Spacer()
                         if branch.name == selectedBranch {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(.accentColor)
+                                .foregroundStyle(.tint)
                                 .font(.system(size: 13, weight: .semibold))
                         }
                     }

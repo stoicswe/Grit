@@ -7,6 +7,7 @@ struct LoginView: View {
     @State private var isLoggingIn = false
     @State private var errorMessage: String?
     @State private var showTokenHelp = false
+    @State private var showToken = false
     @FocusState private var focusedField: Field?
 
     enum Field { case url, token }
@@ -131,14 +132,28 @@ struct LoginView: View {
                                     Image(systemName: "key.fill")
                                         .foregroundStyle(.white.opacity(0.4))
                                         .frame(width: 20)
-                                    SecureField("glpat-xxxxxxxxxxxxxxxxxxxx", text: $accessToken)
-                                        .textContentType(.password)
-                                        .autocapitalization(.none)
-                                        .autocorrectionDisabled()
-                                        .foregroundStyle(.white)
-                                        .focused($focusedField, equals: .token)
-                                        .submitLabel(.go)
-                                        .onSubmit { Task { await login() } }
+                                    Group {
+                                        if showToken {
+                                            TextField("glpat-xxxxxxxxxxxxxxxxxxxx", text: $accessToken)
+                                        } else {
+                                            SecureField("glpat-xxxxxxxxxxxxxxxxxxxx", text: $accessToken)
+                                        }
+                                    }
+                                    .textContentType(.none)
+                                    .autocapitalization(.none)
+                                    .autocorrectionDisabled()
+                                    .foregroundStyle(.white)
+                                    .focused($focusedField, equals: .token)
+                                    .submitLabel(.go)
+                                    .onSubmit { Task { await login() } }
+
+                                    Button {
+                                        showToken.toggle()
+                                    } label: {
+                                        Image(systemName: showToken ? "eye.slash" : "eye")
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(.white.opacity(0.4))
+                                    }
                                 }
                                 .padding(14)
                                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))

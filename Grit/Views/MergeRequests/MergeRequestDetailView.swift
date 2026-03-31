@@ -146,7 +146,7 @@ struct MergeRequestDetailView: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(.tint)
                 Text("AI Code Review")
                     .font(.system(size: 15, weight: .medium))
                 Spacer()
@@ -183,7 +183,7 @@ struct MergeRequestDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
 
                 Image(systemName: "arrow.right.circle.fill")
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(.tint)
                     .font(.system(size: 18))
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -283,7 +283,7 @@ struct MergeRequestDetailView: View {
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 26))
-                            .foregroundStyle(.accentColor)
+                            .foregroundStyle(.tint)
                     }
                     .transition(.scale.combined(with: .opacity))
                 }

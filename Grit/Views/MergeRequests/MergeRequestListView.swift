@@ -73,7 +73,7 @@ struct MergeRequestListView: View {
                                 )
                             )
                     }
-                    .foregroundStyle(viewModel.filterState == state ? .accentColor : .secondary)
+                    .foregroundStyle(viewModel.filterState == state ? Color.accentColor : Color.secondary)
                 }
             }
             .padding(.horizontal, 2)
