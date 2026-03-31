@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct LoginView: View {
     @EnvironmentObject var authService: AuthenticationService
@@ -147,6 +148,21 @@ struct LoginView: View {
                                     .focused($focusedField, equals: .token)
                                     .submitLabel(.go)
                                     .onSubmit { Task { await login() } }
+
+                                    // Paste button — reads UIPasteboard directly,
+                                    // bypassing Simulator clipboard sync entirely
+                                    if accessToken.isEmpty {
+                                        Button {
+                                            if let copied = UIPasteboard.general.string, !copied.isEmpty {
+                                                accessToken = copied
+                                                showToken = false
+                                            }
+                                        } label: {
+                                            Image(systemName: "doc.on.clipboard")
+                                                .font(.system(size: 14))
+                                                .foregroundStyle(.white.opacity(0.5))
+                                        }
+                                    }
 
                                     Button {
                                         showToken.toggle()
