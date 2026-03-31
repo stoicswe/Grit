@@ -191,7 +191,11 @@ struct AIAssistantChatView: View {
             }
             .onChange(of: messages.count) { _, _ in
                 withAnimation {
-                    proxy.scrollTo(messages.last?.id ?? "typing", anchor: .bottom)
+                    if let lastMessage = messages.last {
+                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    } else {
+                        proxy.scrollTo("typing", anchor: .bottom)
+                    }
                 }
             }
             .onChange(of: service.isProcessing) { _, _ in
@@ -236,8 +240,8 @@ struct AIAssistantChatView: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
-                        .background(.accentColor.opacity(0.15), in: Capsule())
-                        .foregroundStyle(.accentColor)
+                        .background(Color.accentColor.opacity(0.15), in: .capsule)
+                        .foregroundStyle(Color.accentColor)
                     }
                 }
 
@@ -252,7 +256,7 @@ struct AIAssistantChatView: View {
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 30))
-                        .foregroundStyle(inputText.isEmpty || !service.isAvailable ? .secondary : .accentColor)
+                        .foregroundStyle(inputText.isEmpty || !service.isAvailable ? Color.secondary : Color.accentColor)
                 }
                 .disabled(inputText.isEmpty || !service.isAvailable || service.isProcessing)
             }

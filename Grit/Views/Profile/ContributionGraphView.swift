@@ -12,11 +12,21 @@ struct ContributionGraphView: View {
         }
     }
 
-    private let monthLabels: [(String, Int)] = {
+    private var monthLabels: [(label: String, weekIndex: Int)] {
+        Self.buildMonthLabels()
+    }
+
+    private static let monthAbbreviationFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM"
+        return f
+    }()
+
+    private static func buildMonthLabels() -> [(label: String, weekIndex: Int)] {
         let calendar = Calendar.current
         let today = Date()
         let oneYearAgo = calendar.date(byAdding: .year, value: -1, to: today) ?? today
-        var result: [(String, Int)] = []
+        var result: [(label: String, weekIndex: Int)] = []
         var currentDate = oneYearAgo
         var lastMonth = -1
         var weekIndex = 0
@@ -24,16 +34,17 @@ struct ContributionGraphView: View {
         while currentDate <= today {
             let month = calendar.component(.month, from: currentDate)
             if month != lastMonth {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "MMM"
-                result.append((formatter.string(from: currentDate), weekIndex))
+                result.append((
+                    label: monthAbbreviationFormatter.string(from: currentDate),
+                    weekIndex: weekIndex
+                ))
                 lastMonth = month
             }
             currentDate = calendar.date(byAdding: .day, value: 7, to: currentDate) ?? today
             weekIndex += 1
         }
         return result
-    }()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -73,13 +84,13 @@ struct ContributionGraphView: View {
     }
 
     private var monthLabelRow: some View {
-        GeometryReader { geo in
+        GeometryReader { _ in
             ZStack(alignment: .topLeading) {
-                ForEach(monthLabels, id: \.1) { label, index in
-                    Text(label)
+                ForEach(monthLabels, id: \.weekIndex) { entry in
+                    Text(entry.label)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
-                        .offset(x: CGFloat(index) * (cellSize + cellSpacing))
+                        .offset(x: CGFloat(entry.weekIndex) * (cellSize + cellSpacing))
                 }
             }
         }

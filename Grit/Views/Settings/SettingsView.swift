@@ -102,7 +102,7 @@ struct SettingsView: View {
                     Task { await notificationService.requestAuthorization() }
                 } label: {
                     Label("Enable Push Notifications", systemImage: "bell.badge")
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                 }
             } else {
                 notificationToggle(

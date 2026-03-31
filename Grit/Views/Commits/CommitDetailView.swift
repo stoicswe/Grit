@@ -4,7 +4,7 @@ struct CommitDetailView: View {
     let commit: Commit
     let projectID: Int
 
-    @StateObject private var aiService = AIAssistantService.shared
+    @ObservedObject private var aiService = AIAssistantService.shared
     @State private var aiExplanation: String?
     @State private var showAISheet = false
 

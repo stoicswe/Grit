@@ -19,10 +19,8 @@ struct GritApp: App {
             .environmentObject(notificationService)
             .environmentObject(settingsStore)
             .preferredColorScheme(settingsStore.colorScheme)
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didFinishLaunchingNotification)) { _ in
-                Task {
-                    await notificationService.requestAuthorization()
-                }
+            .task {
+                await notificationService.requestAuthorization()
             }
         }
     }

@@ -67,7 +67,7 @@ struct NotificationsView: View {
                     }
                 } header: {
                     Label("Unread · \(unread.count)", systemImage: "circle.fill")
-                        .foregroundStyle(.accentColor)
+                        .foregroundStyle(Color.accentColor)
                         .font(.system(size: 13, weight: .semibold))
                         .textCase(nil)
                 }
