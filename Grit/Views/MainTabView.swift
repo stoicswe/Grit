@@ -21,6 +21,8 @@ struct MainTabView: View {
                 SettingsView()
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(edges: .all)
         .task {
             await notificationVM.load()
         }

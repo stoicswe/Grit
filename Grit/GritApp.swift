@@ -15,6 +15,8 @@ struct GritApp: App {
                     LoginView()
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea()
             .environmentObject(authService)
             .environmentObject(notificationService)
             .environmentObject(settingsStore)

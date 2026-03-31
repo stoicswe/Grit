@@ -15,6 +15,7 @@ struct LoginView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
+                Color.clear.ignoresSafeArea()
                 // Background gradient
                 LinearGradient(
                     colors: [
@@ -215,6 +216,7 @@ struct LoginView: View {
                 }
             }
         }
+        .ignoresSafeArea()
         .animation(.spring(duration: 0.3), value: errorMessage)
         .sheet(isPresented: $showTokenHelp) {
             TokenHelpView()
