@@ -5,6 +5,7 @@ struct GritApp: App {
     @StateObject private var authService = AuthenticationService.shared
     @StateObject private var notificationService = NotificationService.shared
     @StateObject private var settingsStore = SettingsStore.shared
+    @StateObject private var navState = AppNavigationState.shared
 
     var body: some Scene {
         WindowGroup {
@@ -20,6 +21,7 @@ struct GritApp: App {
             .environmentObject(authService)
             .environmentObject(notificationService)
             .environmentObject(settingsStore)
+            .environmentObject(navState)
             .preferredColorScheme(settingsStore.colorScheme)
             .task {
                 await notificationService.requestAuthorization()

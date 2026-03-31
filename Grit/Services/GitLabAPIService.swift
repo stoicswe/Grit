@@ -330,6 +330,86 @@ actor GitLabAPIService {
         )
     }
 
+    // MARK: - Repository File Tree
+
+    func fetchRepositoryTree(
+        projectID: Int,
+        path: String = "",
+        ref: String,
+        baseURL: String,
+        token: String
+    ) async throws -> [RepositoryFile] {
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "ref", value: ref),
+            URLQueryItem(name: "per_page", value: "100"),
+            URLQueryItem(name: "recursive", value: "false")
+        ]
+        if !path.isEmpty {
+            items.append(URLQueryItem(name: "path", value: path))
+        }
+        return try await request(
+            "projects/\(projectID)/repository/tree",
+            baseURL: baseURL,
+            token: token,
+            queryItems: items
+        )
+    }
+
+    func fetchFileContent(
+        projectID: Int,
+        filePath: String,
+        ref: String,
+        baseURL: String,
+        token: String
+    ) async throws -> FileContent {
+        let encoded = filePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? filePath
+        return try await request(
+            "projects/\(projectID)/repository/files/\(encoded)",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [URLQueryItem(name: "ref", value: ref)]
+        )
+    }
+
+    // MARK: - Search
+
+    func searchGlobal(
+        query: String,
+        scope: String = "projects",
+        baseURL: String,
+        token: String
+    ) async throws -> [SearchProject] {
+        return try await request(
+            "search",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "scope", value: scope),
+                URLQueryItem(name: "search", value: query),
+                URLQueryItem(name: "per_page", value: "25")
+            ]
+        )
+    }
+
+    func searchRepository(
+        projectID: Int,
+        query: String,
+        scope: String = "blobs",
+        baseURL: String,
+        token: String
+    ) async throws -> [SearchBlob] {
+        return try await request(
+            "projects/\(projectID)/search",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "scope", value: scope),
+                URLQueryItem(name: "search", value: query),
+                URLQueryItem(name: "per_page", value: "25")
+            ]
+        )
+    }
+
     // MARK: - Error
 
     enum APIError: LocalizedError {

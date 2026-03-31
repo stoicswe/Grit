@@ -19,10 +19,21 @@ struct NotificationsView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await viewModel.load() }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
+                    HStack(spacing: 8) {
+                        Button { Task { await viewModel.load() } } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        Menu {
+                            Section("App") {
+                                NavigationLink {
+                                    SettingsView()
+                                } label: {
+                                    Label("Preferences", systemImage: "gearshape")
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
                     }
                 }
             }

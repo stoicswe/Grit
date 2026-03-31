@@ -1,28 +1,58 @@
 import SwiftUI
 
 struct RepositoryListView: View {
+    @Binding var showSearch: Bool
+    @EnvironmentObject var navState: AppNavigationState
     @StateObject private var viewModel = RepositoryViewModel()
-    @State private var searchText = ""
-    @State private var isSearchActive = false
+    @State private var inlineSearchText = ""
+    @State private var isInlineSearchActive = false
 
     var body: some View {
         NavigationStack {
             Group {
-                if isSearchActive && !searchText.isEmpty {
+                if isInlineSearchActive && !inlineSearchText.isEmpty {
                     searchResultsList
                 } else {
                     repositoriesList
                 }
             }
             .navigationTitle("Repositories")
-            .searchable(text: $searchText, isPresented: $isSearchActive, prompt: "Search repositories")
-            .onChange(of: searchText) { _, query in
-                viewModel.search(query: query)
-            }
+            .searchable(
+                text: $inlineSearchText,
+                isPresented: $isInlineSearchActive,
+                prompt: "Filter my repositories"
+            )
+            .onChange(of: inlineSearchText) { _, query in viewModel.search(query: query) }
             .task { await viewModel.loadRepositories(refresh: true) }
             .refreshable { await viewModel.loadRepositories(refresh: true) }
             .navigationDestination(for: Repository.self) { repo in
                 RepositoryDetailView(repository: repo)
+                    .environmentObject(navState)
+            }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    HStack(spacing: 8) {
+                        // Global search button
+                        Button {
+                            showSearch = true
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
+
+                        // Context menu — no repo selected at this level
+                        Menu {
+                            Section("App") {
+                                NavigationLink {
+                                    SettingsView()
+                                } label: {
+                                    Label("Preferences", systemImage: "gearshape")
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                    }
+                }
             }
         }
     }

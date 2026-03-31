@@ -2,20 +2,26 @@ import SwiftUI
 
 struct RepositoryDetailView: View {
     let repository: Repository
+
     @StateObject private var viewModel = RepositoryDetailViewModel()
     @EnvironmentObject var settingsStore: SettingsStore
-    @State private var selectedTab: RepoTab = .commits
+    @EnvironmentObject var navState: AppNavigationState
+
+    @State private var selectedTab: RepoTab = .files
     @State private var showBranchPicker = false
+    @State private var showSearch = false
 
     enum RepoTab: String, CaseIterable {
+        case files = "Files"
         case commits = "Commits"
         case branches = "Branches"
         case mergeRequests = "MRs"
 
         var icon: String {
             switch self {
-            case .commits: return "clock.arrow.circlepath"
-            case .branches: return "arrow.triangle.branch"
+            case .files:         return "folder"
+            case .commits:       return "clock.arrow.circlepath"
+            case .branches:      return "arrow.triangle.branch"
             case .mergeRequests: return "arrow.triangle.merge"
             }
         }
@@ -29,42 +35,125 @@ struct RepositoryDetailView: View {
                         .padding(.horizontal)
                 }
 
-                // Header card
                 repoHeaderCard
-
-                // Stats
-                if let repo = viewModel.repository {
-                    statsRow(repo)
-                }
-
-                // Tab selector
+                if let repo = viewModel.repository { statsRow(repo) }
                 tabSelector
-
-                // Content
                 tabContent
             }
-            .padding(.bottom, 30)
+            .padding(.bottom, 100)
         }
         .navigationTitle(repository.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                subscribeButton
+                HStack(spacing: 10) {
+                    // Contextual search
+                    Button {
+                        showSearch = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+
+                    // Context menu
+                    repoContextMenu
+                }
             }
         }
-        .task { await viewModel.load(projectID: repository.id) }
+        .task {
+            await viewModel.load(projectID: repository.id)
+            navState.enterRepository(repository, branch: viewModel.selectedBranch)
+        }
+        .onDisappear {
+            navState.leaveRepository()
+        }
         .sheet(isPresented: $showBranchPicker) {
             BranchPickerSheet(
                 branches: viewModel.branches,
                 selectedBranch: viewModel.selectedBranch
             ) { branch in
                 showBranchPicker = false
+                navState.currentBranch = branch
                 Task { await viewModel.loadCommits(projectID: repository.id, branch: branch) }
             }
         }
+        .sheet(isPresented: $showSearch) {
+            SearchView()
+                .environmentObject(navState)
+        }
+        // File navigation destinations live on the parent NavigationStack
+        .navigationDestination(for: FileNavigation.self) { nav in
+            if nav.file.isDirectory {
+                FileBrowserView(
+                    projectID: nav.projectID,
+                    ref: nav.ref,
+                    path: nav.file.path,
+                    displayName: nav.file.name
+                )
+                .environmentObject(navState)
+            } else {
+                FileContentView(
+                    projectID: nav.projectID,
+                    filePath: nav.file.path,
+                    fileName: nav.file.name,
+                    ref: nav.ref
+                )
+                .environmentObject(navState)
+            }
+        }
+        .navigationDestination(for: CommitNavigation.self) { nav in
+            CommitDetailView(commit: nav.commit, projectID: nav.projectID)
+        }
     }
 
-    // MARK: - Subviews
+    // MARK: - Context Menu
+
+    private var repoContextMenu: some View {
+        Menu {
+            Section("Repository") {
+                let isSubscribed = settingsStore.isSubscribed(to: repository.id)
+                Button {
+                    settingsStore.toggleProjectSubscription(repository.id)
+                } label: {
+                    Label(
+                        isSubscribed ? "Unsubscribe from Notifications" : "Subscribe to Notifications",
+                        systemImage: isSubscribed ? "bell.slash" : "bell.badge"
+                    )
+                }
+
+                Button {
+                    UIPasteboard.general.string = repository.httpURLToRepo
+                } label: {
+                    Label("Copy Clone URL", systemImage: "doc.on.clipboard")
+                }
+
+                if let url = URL(string: repository.webURL) {
+                    Link(destination: url) {
+                        Label("Open in Browser", systemImage: "safari")
+                    }
+                }
+
+                Button {
+                    showBranchPicker = true
+                } label: {
+                    Label("Switch Branch", systemImage: "arrow.triangle.branch")
+                }
+            }
+
+            Divider()
+
+            Section("App") {
+                NavigationLink {
+                    SettingsView()
+                } label: {
+                    Label("Preferences", systemImage: "gearshape")
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+    }
+
+    // MARK: - Header
 
     private var repoHeaderCard: some View {
         GlassCard {
@@ -76,19 +165,16 @@ struct RepositoryDetailView: View {
                             .frame(width: 44, height: 44)
                         Image(systemName: repository.visibility == "private" ? "lock.fill" : "folder.fill")
                             .font(.system(size: 18))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(.accentColor)
                     }
-
                     VStack(alignment: .leading, spacing: 2) {
                         Text(repository.nameWithNamespace)
                             .font(.system(size: 15, weight: .semibold))
                             .lineLimit(2)
                         VisibilityBadge(visibility: repository.visibility)
                     }
-
                     Spacer()
                 }
-
                 if let desc = repository.description, !desc.isEmpty {
                     Text(desc)
                         .font(.subheadline)
@@ -102,76 +188,94 @@ struct RepositoryDetailView: View {
 
     private func statsRow(_ repo: Repository) -> some View {
         HStack(spacing: 10) {
-            StatBadge(title: "Stars", value: "\(repo.starCount)", icon: "star.fill")
-            StatBadge(title: "Forks", value: "\(repo.forksCount)", icon: "tuningfork")
-            StatBadge(
-                title: "Issues",
-                value: "\(repo.openIssuesCount ?? 0)",
-                icon: "exclamationmark.circle"
-            )
+            StatBadge(title: "Stars",  value: "\(repo.starCount)",           icon: "star.fill")
+            StatBadge(title: "Forks",  value: "\(repo.forksCount)",          icon: "tuningfork")
+            StatBadge(title: "Issues", value: "\(repo.openIssuesCount ?? 0)", icon: "exclamationmark.circle")
         }
         .padding(.horizontal)
     }
+
+    // MARK: - Tab Selector
 
     private var tabSelector: some View {
-        HStack(spacing: 0) {
-            ForEach(RepoTab.allCases, id: \.self) { tab in
-                Button {
-                    withAnimation(.spring(duration: 0.2)) { selectedTab = tab }
-                } label: {
-                    VStack(spacing: 4) {
-                        HStack(spacing: 5) {
-                            Image(systemName: tab.icon)
-                                .font(.system(size: 12))
-                            Text(tab.rawValue)
-                                .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .regular))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                ForEach(RepoTab.allCases, id: \.self) { tab in
+                    Button {
+                        withAnimation(.spring(duration: 0.2)) { selectedTab = tab }
+                    } label: {
+                        VStack(spacing: 4) {
+                            HStack(spacing: 5) {
+                                Image(systemName: tab.icon).font(.system(size: 12))
+                                Text(tab.rawValue)
+                                    .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .regular))
+                            }
+                            .foregroundStyle(selectedTab == tab ? .primary : .secondary)
+                            Capsule()
+                                .fill(selectedTab == tab ? Color.accentColor : .clear)
+                                .frame(height: 2)
                         }
-                        .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-
-                        Capsule()
-                            .fill(selectedTab == tab ? Color.accentColor : .clear)
-                            .frame(height: 2)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
                 }
             }
+            .padding(.horizontal)
         }
-        .padding(.horizontal)
     }
+
+    // MARK: - Tab Content
 
     @ViewBuilder
     private var tabContent: some View {
         switch selectedTab {
+        case .files:
+            filesContent
         case .commits:
             commitsContent
         case .branches:
             BranchListView(branches: viewModel.branches, isLoading: viewModel.isLoading)
                 .padding(.horizontal)
         case .mergeRequests:
-            MergeRequestListView(
-                projectID: repository.id,
-                embeddedMRs: viewModel.mergeRequests
-            )
-            .padding(.horizontal)
+            MergeRequestListView(projectID: repository.id, embeddedMRs: viewModel.mergeRequests)
+                .padding(.horizontal)
         }
     }
 
+    // ── Files tab ──
+
+    private var filesContent: some View {
+        Group {
+            if viewModel.isLoading && viewModel.branches.isEmpty {
+                ProgressView().padding()
+            } else if let branch = viewModel.selectedBranch {
+                FileBrowserView(
+                    projectID: repository.id,
+                    ref: branch,
+                    path: "",
+                    displayName: repository.name
+                )
+                .environmentObject(navState)
+                .frame(minHeight: 300)
+            } else {
+                ContentUnavailableView("No branch selected", systemImage: "arrow.triangle.branch")
+            }
+        }
+    }
+
+    // ── Commits tab ──
+
     private var commitsContent: some View {
         VStack(spacing: 12) {
-            // Branch selector
             Button {
                 showBranchPicker = true
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 12))
+                    Image(systemName: "arrow.triangle.branch").font(.system(size: 12))
                     Text(viewModel.selectedBranch ?? "Select branch")
                         .font(.system(size: 14, weight: .medium))
                     Spacer()
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.down").font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 .padding(12)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -182,22 +286,9 @@ struct RepositoryDetailView: View {
             if viewModel.isLoading {
                 ProgressView().padding()
             } else {
-                CommitListView(
-                    commits: viewModel.commits,
-                    projectID: repository.id
-                )
-                .padding(.horizontal)
+                CommitListView(commits: viewModel.commits, projectID: repository.id)
+                    .padding(.horizontal)
             }
-        }
-    }
-
-    private var subscribeButton: some View {
-        let isSubscribed = settingsStore.isSubscribed(to: repository.id)
-        return Button {
-            settingsStore.toggleProjectSubscription(repository.id)
-        } label: {
-            Image(systemName: isSubscribed ? "bell.fill" : "bell")
-                .foregroundStyle(isSubscribed ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
         }
     }
 }
@@ -212,15 +303,15 @@ struct BranchPickerSheet: View {
     @State private var searchText = ""
 
     var filteredBranches: [Branch] {
-        searchText.isEmpty ? branches : branches.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+        searchText.isEmpty ? branches : branches.filter {
+            $0.name.localizedCaseInsensitiveContains(searchText)
+        }
     }
 
     var body: some View {
         NavigationStack {
             List(filteredBranches) { branch in
-                Button {
-                    onSelect(branch.name)
-                } label: {
+                Button { onSelect(branch.name) } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
@@ -230,22 +321,17 @@ struct BranchPickerSheet: View {
                                 if branch.isDefault {
                                     Text("default")
                                         .font(.system(size: 10))
-                                        .padding(.horizontal, 5)
-                                        .padding(.vertical, 2)
+                                        .padding(.horizontal, 5).padding(.vertical, 2)
                                         .background(.blue.opacity(0.15), in: Capsule())
                                         .foregroundStyle(.blue)
                                 }
                                 if branch.protected {
                                     Image(systemName: "lock.fill")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.orange)
+                                        .font(.system(size: 10)).foregroundStyle(.orange)
                                 }
                             }
                             if let commit = branch.commit {
-                                Text(commit.title)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                                Text(commit.title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
                         Spacer()
