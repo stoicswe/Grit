@@ -39,7 +39,7 @@ struct AIAssistantChatView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "scope")
                             .font(.system(size: 12))
-                            .foregroundStyle(.accentColor)
+                            .foregroundStyle(.secondary)
                         Text("Context: \(summary)")
                             .font(.system(size: 12))
                             .lineLimit(1)
@@ -100,7 +100,7 @@ struct AIAssistantChatView: View {
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 30))
-                            .foregroundStyle(inputText.isEmpty ? .secondary : .accentColor)
+                            .foregroundStyle(inputText.isEmpty ? .secondary : .primary)
                     }
                     .disabled(inputText.isEmpty || isThinking)
                 }
@@ -173,7 +173,7 @@ struct UserBubble: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(.accentColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(.primary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 }
@@ -188,7 +188,7 @@ struct AssistantBubble: View {
                 Circle().fill(.ultraThinMaterial).frame(width: 28, height: 28)
                 Image(systemName: "sparkles")
                     .font(.system(size: 12))
-                    .foregroundStyle(.accentColor)
+                    .foregroundStyle(.primary)
             }
             Group {
                 if isThinking {

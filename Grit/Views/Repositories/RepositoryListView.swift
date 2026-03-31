@@ -116,8 +116,8 @@ struct RepositoryListView: View {
                     Spacer()
                 }
                 .listRowBackground(Color.clear)
-            } else if viewModel.searchResults.isEmpty && !searchText.isEmpty {
-                ContentUnavailableView.search(text: searchText)
+            } else if viewModel.searchResults.isEmpty && !inlineSearchText.isEmpty {
+                ContentUnavailableView.search(text: inlineSearchText)
                     .listRowBackground(Color.clear)
             } else {
                 ForEach(viewModel.searchResults) { repo in

@@ -165,7 +165,7 @@ struct RepositoryDetailView: View {
                             .frame(width: 44, height: 44)
                         Image(systemName: repository.visibility == "private" ? "lock.fill" : "folder.fill")
                             .font(.system(size: 18))
-                            .foregroundStyle(.accentColor)
+                            .foregroundStyle(.primary)
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(repository.nameWithNamespace)

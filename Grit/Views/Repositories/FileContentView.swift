@@ -58,7 +58,7 @@ struct FileContentView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 6) {
                                 Image(systemName: "sparkles")
-                                    .foregroundStyle(.accentColor)
+                                    .foregroundStyle(.primary)
                                 Text("Apple Intelligence")
                                     .font(.system(size: 13, weight: .semibold))
                             }
