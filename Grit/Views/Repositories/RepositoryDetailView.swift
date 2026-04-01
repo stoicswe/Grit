@@ -6,10 +6,14 @@ struct RepositoryDetailView: View {
     @StateObject private var viewModel = RepositoryDetailViewModel()
     @EnvironmentObject var settingsStore: SettingsStore
     @EnvironmentObject var navState: AppNavigationState
+    @ObservedObject private var starVM = StarredReposViewModel.shared
 
     @State private var selectedTab: RepoTab = .files
     @State private var showBranchPicker = false
     @State private var showSearch = false
+    @State private var showIssues = false
+    @State private var showForks  = false
+    @State private var showRepoInfo = false
 
     enum RepoTab: String, CaseIterable {
         case files = "Files"
@@ -80,6 +84,13 @@ struct RepositoryDetailView: View {
             SearchView()
                 .environmentObject(navState)
         }
+        .sheet(isPresented: $showIssues) {
+            IssuesView(projectID: repository.id, repoName: repository.name)
+        }
+        .sheet(isPresented: $showForks) {
+            ForksView(projectID: repository.id, parentRepoName: repository.name)
+                .environmentObject(navState)
+        }
         // File navigation destinations live on the parent NavigationStack
         .navigationDestination(for: FileNavigation.self) { nav in
             if nav.file.isDirectory {
@@ -103,6 +114,21 @@ struct RepositoryDetailView: View {
         .navigationDestination(for: CommitNavigation.self) { nav in
             CommitDetailView(commit: nav.commit, projectID: nav.projectID)
         }
+        .navigationDestination(for: BranchNavigation.self) { nav in
+            BranchDetailView(projectID: nav.projectID, branch: nav.branch)
+        }
+        // Repo info center popup — floats above all content
+        .overlay {
+            if showRepoInfo {
+                RepoInfoOverlay(
+                    repository:  repository,
+                    projectID:   repository.id,
+                    isPresented: $showRepoInfo
+                )
+                .zIndex(100)
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showRepoInfo)
     }
 
     // MARK: - Context Menu
@@ -156,43 +182,76 @@ struct RepositoryDetailView: View {
     // MARK: - Header
 
     private var repoHeaderCard: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .frame(width: 44, height: 44)
-                        Image(systemName: repository.visibility == "private" ? "lock.fill" : "folder.fill")
-                            .font(.system(size: 18))
-                            .foregroundStyle(.primary)
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                showRepoInfo = true
+            }
+        } label: {
+            GlassCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                                .frame(width: 44, height: 44)
+                            Image(systemName: repository.visibility == "private" ? "lock.fill" : "folder.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(.primary)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(repository.nameWithNamespace)
+                                .font(.system(size: 15, weight: .semibold))
+                                .lineLimit(2)
+                            VisibilityBadge(visibility: repository.visibility)
+                        }
+                        Spacer()
+                        // Tap hint chevron
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.tertiary)
                     }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(repository.nameWithNamespace)
-                            .font(.system(size: 15, weight: .semibold))
-                            .lineLimit(2)
-                        VisibilityBadge(visibility: repository.visibility)
+                    if let desc = repository.description, !desc.isEmpty {
+                        Text(desc)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
                     }
-                    Spacer()
-                }
-                if let desc = repository.description, !desc.isEmpty {
-                    Text(desc)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
                 }
             }
         }
+        .buttonStyle(.plain)
         .padding(.horizontal)
     }
 
     private func statsRow(_ repo: Repository) -> some View {
         HStack(spacing: 10) {
-            StatBadge(title: "Stars",  value: "\(repo.starCount)",           icon: "star.fill")
-            StatBadge(title: "Forks",  value: "\(repo.forksCount)",          icon: "tuningfork")
-            StatBadge(title: "Issues", value: "\(repo.openIssuesCount ?? 0)", icon: "exclamationmark.circle")
+            // Tappable star badge — stars/unstars the repo
+            Button {
+                Task { await starVM.toggleStar(repo: repo) }
+            } label: {
+                StatBadge(
+                    title: starVM.isStarred(repo.id) ? "Starred" : "Stars",
+                    value: "\(repo.starCount)",
+                    icon: starVM.isStarred(repo.id) ? "star.fill" : "star"
+                )
+                .foregroundStyle(starVM.isStarred(repo.id) ? .yellow : .primary)
+            }
+            .buttonStyle(.plain)
+
+            // Tappable forks badge — opens forks list sheet
+            Button { showForks = true } label: {
+                StatBadge(title: "Forks", value: "\(repo.forksCount)", icon: "tuningfork")
+            }
+            .buttonStyle(.plain)
+
+            // Tappable issues badge — opens issues list sheet
+            Button { showIssues = true } label: {
+                StatBadge(title: "Issues", value: "\(repo.openIssuesCount ?? 0)", icon: "exclamationmark.circle")
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal)
+        .task { await starVM.loadIfNeeded() }
     }
 
     // MARK: - Tab Selector
@@ -234,7 +293,7 @@ struct RepositoryDetailView: View {
         case .commits:
             commitsContent
         case .branches:
-            BranchListView(branches: viewModel.branches, isLoading: viewModel.isLoading)
+            BranchListView(branches: viewModel.branches, projectID: repository.id, isLoading: viewModel.isLoading)
                 .padding(.horizontal)
         case .mergeRequests:
             MergeRequestListView(projectID: repository.id, embeddedMRs: viewModel.mergeRequests)

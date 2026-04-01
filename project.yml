@@ -25,6 +25,10 @@ targets:
       - path: Grit
     info:
       path: Grit/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
     entitlements:
       path: Grit/Grit.entitlements
     settings:

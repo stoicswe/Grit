@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BranchListView: View {
     let branches: [Branch]
+    let projectID: Int
     var isLoading: Bool = false
 
     var body: some View {
@@ -12,7 +13,10 @@ struct BranchListView: View {
                 ContentUnavailableView("No branches", systemImage: "arrow.triangle.branch")
             } else {
                 ForEach(branches) { branch in
-                    BranchRowView(branch: branch)
+                    NavigationLink(value: BranchNavigation(projectID: projectID, branch: branch)) {
+                        BranchRowView(branch: branch)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -78,6 +82,10 @@ struct BranchRowView: View {
                 }
 
                 Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
         }
     }

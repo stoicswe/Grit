@@ -5,6 +5,7 @@ struct CommitDetailView: View {
     let projectID: Int
 
     @ObservedObject private var aiService = AIAssistantService.shared
+    @StateObject private var diffVM = CommitDiffViewModel()
     @State private var aiExplanation: String?
     @State private var showAISheet = false
 
@@ -102,7 +103,7 @@ struct CommitDetailView: View {
                 }
 
                 // AI Explain button
-                if aiService.isAvailable {
+                if aiService.isUserEnabled {
                     Button {
                         showAISheet = true
                         if aiExplanation == nil {
@@ -149,11 +150,15 @@ struct CommitDetailView: View {
                     }
                     .padding(.horizontal)
                 }
+
+                // Changed files diff section
+                diffSection
             }
             .padding(.bottom, 30)
         }
         .navigationTitle(commit.shortSHA)
         .navigationBarTitleDisplayMode(.inline)
+        .task { await diffVM.load(projectID: projectID, sha: commit.id) }
         .sheet(isPresented: $showAISheet) {
             AIResponseSheet(
                 title: "Commit Explanation",
@@ -163,6 +168,41 @@ struct CommitDetailView: View {
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+    }
+
+    // MARK: - Diff Section
+
+    @ViewBuilder
+    private var diffSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if diffVM.isLoading {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Loading diff…")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 20)
+
+            } else if let errMsg = diffVM.error {
+                GlassCard {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        Text(errMsg)
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal)
+
+            } else if !diffVM.fileDiffs.isEmpty {
+                CommitDiffView(fileDiffs: diffVM.fileDiffs)
+                    .padding(.horizontal)
+            }
         }
     }
 
@@ -202,13 +242,74 @@ struct CommitDetailView: View {
     private func requestAIExplanation() async {
         let statsText: String
         if let stats = commit.stats {
-            statsText = "+\(stats.additions) / -\(stats.deletions) lines changed"
+            statsText = "+\(stats.additions) additions, -\(stats.deletions) deletions, \(stats.total) lines total"
         } else {
             statsText = "stats not available"
         }
+
+        // Wait for the diff to finish loading (usually already done by the time
+        // the user taps Explain, but guard just in case).
+        if diffVM.isLoading {
+            // Poll briefly — diffs normally load in < 1 s
+            var waited = 0
+            while diffVM.isLoading && waited < 20 {
+                try? await Task.sleep(for: .milliseconds(150))
+                waited += 1
+            }
+        }
+
         aiExplanation = try? await aiService.explainCommit(
             message: commit.message,
-            stats: statsText
+            stats: statsText,
+            diff: buildDiffText(from: diffVM.fileDiffs)
         )
+    }
+
+    /// Reconstructs a compact unified diff string from pre-parsed file diffs.
+    /// Caps total output to ~6 000 characters so the model prompt stays reasonable.
+    private func buildDiffText(from fileDiffs: [ParsedFileDiff]) -> String {
+        guard !fileDiffs.isEmpty else { return "" }
+
+        let characterBudget = 6_000
+        var output = ""
+
+        for file in fileDiffs {
+            guard !file.isBinaryOrEmpty, !file.isTooLarge else { continue }
+
+            let header: String
+            if file.meta.renamedFile,
+               let old = file.meta.oldPath, let new = file.meta.newPath, old != new {
+                header = "--- \(old)\n+++ \(new)\n"
+            } else {
+                header = "--- \(file.meta.displayPath)\n+++ \(file.meta.displayPath)\n"
+            }
+
+            var fileChunk = header
+            for line in file.lines {
+                let prefix: String
+                switch line.kind {
+                case .hunkHeader: prefix = ""          // keep the @@ line as-is
+                case .added:      prefix = "+"
+                case .removed:    prefix = "-"
+                case .context:    prefix = " "
+                case .meta:       continue             // skip +++ / --- / \ No newline
+                }
+                fileChunk += "\(prefix)\(line.content)\n"
+            }
+
+            // Stop adding files once we would exceed the budget
+            if output.count + fileChunk.count > characterBudget {
+                let remaining = characterBudget - output.count
+                if remaining > header.count {
+                    output += String(fileChunk.prefix(remaining))
+                    output += "\n… (diff truncated)"
+                }
+                break
+            }
+
+            output += fileChunk
+        }
+
+        return output
     }
 }

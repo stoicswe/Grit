@@ -4,30 +4,16 @@ import SwiftUI
 
 enum AppTab: Int, CaseIterable {
     case repositories = 0
-    case notifications = 1
-    case profile = 2
+    case explore       = 1
+    case notifications = 2
+    case profile       = 3
 
     var title: String {
         switch self {
         case .repositories: return "Repositories"
         case .notifications: return "Notifications"
+        case .explore:       return "Explore"
         case .profile:       return "Profile"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .repositories: return "square.stack.3d.up"
-        case .notifications: return "bell"
-        case .profile:       return "person.circle"
-        }
-    }
-
-    var selectedIcon: String {
-        switch self {
-        case .repositories: return "square.stack.3d.up.fill"
-        case .notifications: return "bell.fill"
-        case .profile:       return "person.circle.fill"
         }
     }
 }
@@ -43,57 +29,105 @@ struct MainTabView: View {
     @State private var showAIChat = false
     @State private var showSearch = false
 
+    @ObservedObject private var aiService = AIAssistantService.shared
+
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // ── Content ──────────────────────────────────────────────
+        ZStack(alignment: .bottomTrailing) {
+
+            // ── Native TabView ────────────────────────────────────────
             TabView(selection: $selectedTab) {
-                RepositoryListView(showSearch: $showSearch)
-                    .tag(AppTab.repositories)
-
-                NotificationsView()
-                    .environmentObject(notificationVM)
-                    .tag(AppTab.notifications)
-
-                ProfileView()
-                    .tag(AppTab.profile)
-                
-                Button {
-                    showAIChat = true
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                            .frame(width: 56, height: 56)
-                            .overlay(Circle().strokeBorder(.white.opacity(0.14), lineWidth: 0.5))
-                            .shadow(color: .accentColor.opacity(0.25), radius: 10, y: 4)
-
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.accentColor, .purple],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
+                Tab("Repositories", systemImage: "square.stack.3d.up", value: AppTab.repositories) {
+                    RepositoryListView(showSearch: $showSearch)
                 }
-                .buttonStyle(.plain)
+
+                Tab("Explore", systemImage: "safari", value: AppTab.explore) {
+                    ExploreView()
+                        .environmentObject(navState)
+                }
+
+                Tab("Notifications", systemImage: "bell", value: AppTab.notifications) {
+                    NotificationsView()
+                        .environmentObject(notificationVM)
+                }
+                .badge(notificationVM.unreadCount)
+
+                Tab("Profile", systemImage: "person.circle", value: AppTab.profile) {
+                    ProfileView()
+                }
             }
-            // Hide the system-generated tab bar — we draw our own below
-            .ignoresSafeArea(edges: .bottom)
+
+            // ── Floating AI Panel — only when AI is user-enabled ──────
+            if aiService.isUserEnabled {
+                if showAIChat {
+                    AIFloatingPanel(isPresented: $showAIChat)
+                        .environmentObject(navState)
+                        .zIndex(10)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal:   .move(edge: .bottom).combined(with: .opacity)
+                        ))
+                }
+
+                // ── AI Circle Button (floats above tab bar, far right) ──
+                aiCircleButton
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 80)   // clears the native tab bar + home indicator
+                    .zIndex(20)
+            }
         }
-        .ignoresSafeArea(edges: .bottom)
+        // Close the panel if the user disables AI while it's open
+        .onChange(of: aiService.isUserEnabled) { _, enabled in
+            if !enabled { showAIChat = false }
+        }
+        .animation(.spring(duration: 0.35, bounce: 0.1), value: showAIChat)
         .task { await notificationVM.load() }
-        // Search sheet — context-aware via AppNavigationState
         .sheet(isPresented: $showSearch) {
             SearchView()
                 .environmentObject(navState)
         }
-        // AI Assistant sheet
-        .sheet(isPresented: $showAIChat) {
-            AIAssistantChatView()
-                .environmentObject(navState)
+    }
+
+    // MARK: - AI Circle Button
+
+    private var aiCircleButton: some View {
+        Button {
+            withAnimation(.spring(duration: 0.35, bounce: 0.1)) {
+                showAIChat.toggle()
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 52, height: 52)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(
+                                showAIChat
+                                    ? AnyShapeStyle(LinearGradient(
+                                        colors: [.accentColor, .purple],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing))
+                                    : AnyShapeStyle(Color.white.opacity(0.15)),
+                                lineWidth: showAIChat ? 1.5 : 0.5
+                            )
+                    )
+                    .shadow(
+                        color: Color.accentColor.opacity(showAIChat ? 0.45 : 0.18),
+                        radius: 14, y: 4
+                    )
+
+                Image(systemName: showAIChat ? "xmark" : "sparkles")
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.accentColor, .purple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .animation(.spring(duration: 0.25), value: showAIChat)
+            }
         }
+        .buttonStyle(.plain)
     }
 }

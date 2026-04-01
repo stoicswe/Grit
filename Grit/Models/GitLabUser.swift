@@ -15,6 +15,7 @@ struct GitLabUser: Codable, Identifiable, Equatable {
     let followers: Int?
     let following: Int?
     let publicRepos: Int?
+    let isFollowing: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, username, name, email, bio, location, state, followers, following
@@ -23,5 +24,6 @@ struct GitLabUser: Codable, Identifiable, Equatable {
         case webURL = "web_url"
         case createdAt = "created_at"
         case publicRepos = "public_repos"
+        case isFollowing = "is_following"
     }
 }

@@ -146,6 +146,40 @@ actor GitLabAPIService {
         ])
     }
 
+    /// Browse all accessible GitLab projects sorted by the given field.
+    /// Valid order_by values: "star_count", "last_activity_at", "created_at", "name", "id"
+    func fetchExploreProjects(
+        orderBy: String = "star_count",
+        baseURL: String,
+        token: String,
+        page: Int = 1
+    ) async throws -> [Repository] {
+        return try await request("projects", baseURL: baseURL, token: token, queryItems: [
+            URLQueryItem(name: "order_by", value: orderBy),
+            URLQueryItem(name: "sort", value: "desc"),
+            URLQueryItem(name: "per_page", value: "25"),
+            URLQueryItem(name: "page", value: "\(page)")
+        ])
+    }
+
+    // MARK: - Starring
+
+    func fetchStarredProjects(baseURL: String, token: String) async throws -> [Repository] {
+        return try await request("projects", baseURL: baseURL, token: token, queryItems: [
+            URLQueryItem(name: "starred", value: "true"),
+            URLQueryItem(name: "order_by", value: "last_activity_at"),
+            URLQueryItem(name: "per_page", value: "50")
+        ])
+    }
+
+    func starProject(projectID: Int, baseURL: String, token: String) async throws {
+        try await voidPost("projects/\(projectID)/star", baseURL: baseURL, token: token)
+    }
+
+    func unstarProject(projectID: Int, baseURL: String, token: String) async throws {
+        try await voidPost("projects/\(projectID)/star", baseURL: baseURL, token: token, method: "DELETE")
+    }
+
     func fetchRepository(projectID: Int, baseURL: String, token: String) async throws -> Repository {
         return try await request("projects/\(projectID)", baseURL: baseURL, token: token, queryItems: [
             URLQueryItem(name: "statistics", value: "true")
@@ -192,6 +226,202 @@ actor GitLabAPIService {
             baseURL: baseURL,
             token: token,
             queryItems: items
+        )
+    }
+
+    func fetchCommitDiff(projectID: Int, sha: String, baseURL: String, token: String) async throws -> [CommitDiff] {
+        return try await request(
+            "projects/\(projectID)/repository/commits/\(sha)/diff",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [URLQueryItem(name: "per_page", value: "50")]
+        )
+    }
+
+    // MARK: - Issues
+
+    func fetchIssue(
+        projectID: Int,
+        issueIID: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> GitLabIssue {
+        return try await request(
+            "projects/\(projectID)/issues/\(issueIID)",
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func fetchIssues(
+        projectID: Int,
+        state: String = "opened",
+        baseURL: String,
+        token: String,
+        page: Int = 1
+    ) async throws -> [GitLabIssue] {
+        return try await request(
+            "projects/\(projectID)/issues",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "state",    value: state),
+                URLQueryItem(name: "per_page", value: "20"),
+                URLQueryItem(name: "page",     value: "\(page)"),
+                URLQueryItem(name: "order_by", value: "updated_at"),
+                URLQueryItem(name: "sort",     value: "desc")
+            ]
+        )
+    }
+
+    func fetchIssueNotes(
+        projectID: Int,
+        issueIID: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> [GitLabIssueNote] {
+        return try await request(
+            "projects/\(projectID)/issues/\(issueIID)/notes",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "order_by", value: "created_at"),
+                URLQueryItem(name: "sort",     value: "asc")
+            ]
+        )
+    }
+
+    func addIssueNote(
+        projectID: Int,
+        issueIID: Int,
+        body: String,
+        baseURL: String,
+        token: String
+    ) async throws -> GitLabIssueNote {
+        return try await post(
+            "projects/\(projectID)/issues/\(issueIID)/notes",
+            baseURL: baseURL,
+            token: token,
+            body: NoteBody(body: body)
+        )
+    }
+
+    func subscribeToIssue(
+        projectID: Int,
+        issueIID: Int,
+        baseURL: String,
+        token: String
+    ) async throws {
+        try await voidPost(
+            "projects/\(projectID)/issues/\(issueIID)/subscribe",
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func unsubscribeFromIssue(
+        projectID: Int,
+        issueIID: Int,
+        baseURL: String,
+        token: String
+    ) async throws {
+        try await voidPost(
+            "projects/\(projectID)/issues/\(issueIID)/unsubscribe",
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    // MARK: - Follow
+
+    private struct EmptyBody: Encodable {}
+
+    func fetchUserProjects(userID: Int, baseURL: String, token: String) async throws -> [Repository] {
+        return try await request("users/\(userID)/projects", baseURL: baseURL, token: token, queryItems: [
+            URLQueryItem(name: "per_page", value: "10")
+        ])
+    }
+
+    @discardableResult
+    func followUser(userID: Int, baseURL: String, token: String) async throws -> GitLabUser {
+        return try await post("users/\(userID)/follow", baseURL: baseURL, token: token, body: EmptyBody())
+    }
+
+    @discardableResult
+    func unfollowUser(userID: Int, baseURL: String, token: String) async throws -> GitLabUser {
+        return try await post("users/\(userID)/unfollow", baseURL: baseURL, token: token, body: EmptyBody(), method: "DELETE")
+    }
+
+    func searchUsers(query: String, baseURL: String, token: String) async throws -> [GitLabUser] {
+        return try await request("users", baseURL: baseURL, token: token, queryItems: [
+            URLQueryItem(name: "search", value: query),
+            URLQueryItem(name: "per_page", value: "5")
+        ])
+    }
+
+    // MARK: - Contributors
+
+    /// Returns contributors sorted by commit count (descending).
+    func fetchContributors(
+        projectID: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> [GitLabContributor] {
+        return try await request(
+            "projects/\(projectID)/repository/contributors",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "sort",     value: "desc"),
+                URLQueryItem(name: "per_page", value: "50")
+            ]
+        )
+    }
+
+    /// Fetches and base64-decodes the repository README.
+    /// Tries the most common README filenames in order; returns `nil` if none exist.
+    /// Never throws — a missing README is not an error.
+    func fetchReadme(
+        projectID: Int,
+        ref: String,
+        baseURL: String,
+        token: String
+    ) async -> String? {
+        let candidates = ["README.md", "readme.md", "README", "README.rst", "README.txt"]
+        for candidate in candidates {
+            if let file = try? await fetchFileContent(
+                projectID: projectID,
+                filePath: candidate,
+                ref: ref,
+                baseURL: baseURL,
+                token: token
+            ), let text = file.decodedContent {
+                return text
+            }
+        }
+        return nil
+    }
+
+    // MARK: - Forks
+
+    func fetchForks(
+        projectID: Int,
+        baseURL: String,
+        token: String,
+        page: Int = 1
+    ) async throws -> [Repository] {
+        return try await request(
+            "projects/\(projectID)/forks",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "per_page",   value: "20"),
+                URLQueryItem(name: "page",       value: "\(page)"),
+                URLQueryItem(name: "order_by",   value: "last_activity_at"),
+                URLQueryItem(name: "sort",       value: "desc"),
+                URLQueryItem(name: "statistics", value: "true")
+            ]
         )
     }
 
@@ -362,13 +592,29 @@ actor GitLabAPIService {
         baseURL: String,
         token: String
     ) async throws -> FileContent {
-        let encoded = filePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? filePath
-        return try await request(
-            "projects/\(projectID)/repository/files/\(encoded)",
-            baseURL: baseURL,
-            token: token,
-            queryItems: [URLQueryItem(name: "ref", value: ref)]
-        )
+        // GitLab requires slashes in the file path to be encoded as %2F.
+        // .urlPathAllowed leaves "/" unencoded, so we remove it from the set.
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/")
+        let encodedPath = filePath.addingPercentEncoding(withAllowedCharacters: allowed) ?? filePath
+
+        // Also percent-encode the ref for the query string
+        let encodedRef = ref.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ref
+
+        // Build URL directly — URLComponents would re-decode %2F back to /
+        let urlString = "\(baseURL)/api/v4/projects/\(projectID)/repository/files/\(encodedPath)?ref=\(encodedRef)"
+        guard let url = URL(string: urlString) else { throw APIError.invalidURL }
+
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await session.data(for: req)
+        guard let httpResponse = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(httpResponse.statusCode)
+        }
+        return try decoder.decode(FileContent.self, from: data)
     }
 
     // MARK: - Search

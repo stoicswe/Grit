@@ -15,6 +15,10 @@ final class AIAssistantService: ObservableObject {
     @Published var isProcessing: Bool = false
     @Published var lastResponse: String = ""
 
+    var isUserEnabled: Bool {
+        isAvailable && SettingsStore.shared.appleIntelligenceEnabled
+    }
+
     private init() {
         #if canImport(FoundationModels)
         isAvailable = SystemLanguageModel.default.isAvailable
@@ -72,21 +76,42 @@ final class AIAssistantService: ObservableObject {
         #endif
     }
 
-    func explainCommit(message: String, stats: String) async throws -> String {
+    func explainCommit(message: String, stats: String, diff: String) async throws -> String {
         #if canImport(FoundationModels)
         guard isAvailable else { throw AIError.notAvailable }
         isProcessing = true
         defer { isProcessing = false }
 
         let session = LanguageModelSession()
-        let prompt = """
-        Explain what this commit does based on its message and stats:
 
-        Message: \(message)
-        Stats: \(stats)
+        var prompt = """
+        You are a senior software engineer reviewing a Git commit. \
+        Explain clearly what this commit does, why it likely matters, and highlight \
+        any notable implementation choices visible in the diff.
 
-        Be brief and clear — 2-3 sentences max.
+        ## Commit Message
+        \(message)
+
+        ## Change Stats
+        \(stats)
+
         """
+
+        if !diff.isEmpty {
+            prompt += """
+
+        ## File Diffs
+        \(diff)
+
+        """
+        }
+
+        prompt += """
+
+        Respond in plain prose — no bullet points, no headers. \
+        2–4 sentences. Focus on intent and impact, not line-by-line narration.
+        """
+
         let response = try await session.respond(to: prompt)
         lastResponse = response.content
         return response.content

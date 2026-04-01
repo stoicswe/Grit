@@ -20,7 +20,7 @@ struct MergeRequestDetailView: View {
                 statsRow
 
                 // AI Review button
-                if AIAssistantService.shared.isAvailable {
+                if AIAssistantService.shared.isUserEnabled {
                     aiReviewButton
                 }
 

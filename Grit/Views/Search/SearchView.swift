@@ -9,7 +9,7 @@ struct SearchView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var query = ""
-    @FocusState private var focused: Bool
+    @State private var isSearchPresented = false
 
     var isInsideRepo: Bool { navState.currentRepository != nil }
 
@@ -32,7 +32,7 @@ struct SearchView: View {
                 : "Search GitLab"
             )
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, isPresented: $focused, prompt: searchPrompt)
+            .searchable(text: $query, isPresented: $isSearchPresented, prompt: searchPrompt)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -45,7 +45,7 @@ struct SearchView: View {
                     viewModel.searchGlobal(query: q)
                 }
             }
-            .onAppear { focused = true }
+            .onAppear { isSearchPresented = true }
             .onDisappear { viewModel.reset() }
         }
         .navigationDestination(for: Repository.self) { repo in
@@ -131,7 +131,7 @@ struct SearchView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "doc.text.magnifyingglass")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(.accentColor)
+                                    .foregroundStyle(.tint)
                                 Text(blob.filename)
                                     .font(.system(size: 14, weight: .semibold, design: .monospaced))
                                     .lineLimit(1)

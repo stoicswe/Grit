@@ -1,24 +1,290 @@
 import SwiftUI
 
-// MARK: - AI Assistant Chat View
-// Full conversational AI panel — context-aware via AppNavigationState.
-// Uses Apple Intelligence (FoundationModels) on-device.
+// MARK: - AI Floating Panel
+// A draggable, hovering overlay panel that sits above the current view.
+// Does NOT use .sheet — it lives in the main ZStack so the user can see
+// the app content behind it.
 
-struct AIAssistantChatView: View {
+struct AIFloatingPanel: View {
+    @Binding var isPresented: Bool
     @EnvironmentObject var navState: AppNavigationState
     @ObservedObject private var service = AIAssistantService.shared
-    @Environment(\.dismiss) var dismiss
 
     @State private var messages: [ChatMessage] = []
     @State private var inputText = ""
     @State private var isThinking = false
     @FocusState private var inputFocused: Bool
 
+    /// Drag offset — negative = dragged upward (taller panel)
+    @State private var dragOffset: CGFloat = 0
+    @GestureState private var isDragging = false
+
+    // Collapsed = ~42 % of screen; expanded = ~72 %
+    private let collapsedFraction: CGFloat = 0.42
+    private let expandedFraction: CGFloat  = 0.74
+
     struct ChatMessage: Identifiable {
         let id = UUID()
         let isUser: Bool
         let content: String
     }
+
+    // MARK: - Body
+
+    var body: some View {
+        GeometryReader { geo in
+            let baseHeight = geo.size.height * collapsedFraction
+            let panelHeight = max(
+                geo.size.height * collapsedFraction,
+                min(geo.size.height * expandedFraction, baseHeight - dragOffset)
+            )
+            // Sit just above the AI button (button bottom=80, height=52, + 8pt gap)
+            let bottomInset: CGFloat = 148
+
+            VStack(spacing: 0) {
+                Spacer()
+
+                VStack(spacing: 0) {
+                    // ── Drag Handle ──────────────────────────────────
+                    dragHandle
+
+                    // ── Context Banner ───────────────────────────────
+                    if let summary = navState.contextSummary {
+                        contextBanner(summary)
+                    }
+
+                    // ── Message List ─────────────────────────────────
+                    messageList
+                        .frame(maxHeight: .infinity)
+
+                    Divider().opacity(0.35)
+
+                    // ── Input Bar ────────────────────────────────────
+                    inputBar
+                }
+                .frame(height: panelHeight)
+                .background(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .shadow(color: .black.opacity(0.25), radius: 30, y: -4)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                )
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            dragOffset = value.translation.height
+                        }
+                        .onEnded { value in
+                            // Flick down to dismiss
+                            if value.translation.height > 120 {
+                                withAnimation(.spring(duration: 0.35)) { isPresented = false }
+                            } else {
+                                withAnimation(.spring(duration: 0.3)) { dragOffset = 0 }
+                            }
+                        }
+                )
+                .padding(.bottom, bottomInset)
+            }
+        }
+        .ignoresSafeArea(.keyboard)
+    }
+
+    // MARK: - Subviews
+
+    private var dragHandle: some View {
+        VStack(spacing: 4) {
+            Capsule()
+                .fill(Color.secondary.opacity(0.4))
+                .frame(width: 36, height: 4)
+                .padding(.top, 10)
+
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.accentColor, .purple],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                Text("AI Assistant")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                if !messages.isEmpty {
+                    Button {
+                        withAnimation { messages.removeAll() }
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private func contextBanner(_ summary: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "scope")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Text(summary)
+                .font(.system(size: 12))
+                .lineLimit(1)
+                .foregroundStyle(.secondary)
+            Spacer()
+            if navState.currentScreenContent != nil {
+                Image(systemName: "doc.text.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.accentColor.opacity(0.8))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(Color.primary.opacity(0.04))
+    }
+
+    private var messageList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    AssistantBubble(text: contextGreeting, isThinking: false)
+                        .padding(.top, 12)
+
+                    ForEach(messages) { msg in
+                        if msg.isUser {
+                            UserBubble(text: msg.content)
+                        } else {
+                            AssistantBubble(text: msg.content, isThinking: false)
+                        }
+                    }
+
+                    if isThinking {
+                        AssistantBubble(text: "", isThinking: true)
+                            .id("thinking")
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+            .onChange(of: isThinking) { _, thinking in
+                if thinking {
+                    withAnimation { proxy.scrollTo("thinking", anchor: .bottom) }
+                }
+            }
+            .onChange(of: messages.count) { _, _ in
+                if let last = messages.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+            }
+        }
+    }
+
+    private var inputBar: some View {
+        HStack(spacing: 10) {
+            TextField("Ask anything…", text: $inputText, axis: .vertical)
+                .lineLimit(1...4)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(
+                    .ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+                .focused($inputFocused)
+
+            Button {
+                Task { await send() }
+            } label: {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(inputText.isEmpty ? Color.secondary : Color.accentColor)
+            }
+            .disabled(inputText.isEmpty || isThinking)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: - Greeting
+
+    private var contextGreeting: String {
+        if let path = navState.currentFilePath {
+            let fileName = path.split(separator: "/").last.map(String.init) ?? path
+            return "I can see you're viewing **\(fileName)**. Ask me anything about this file."
+        }
+        if let repo = navState.currentRepository {
+            return "I can see you're in **\(repo.name)**\(navState.currentBranch.map { " on `\($0)`" } ?? ""). What would you like to know?"
+        }
+        return "Ask me anything about your GitLab projects, code, or merge requests."
+    }
+
+    // MARK: - Send
+
+    private func send() async {
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        inputText = ""
+        inputFocused = false
+        messages.append(ChatMessage(isUser: true, content: text))
+        isThinking = true
+        defer { isThinking = false }
+
+        do {
+            let instruction = buildInstruction(for: text)
+            let response = try await service.analyzeCode("", instruction: instruction)
+            messages.append(ChatMessage(isUser: false, content: response))
+        } catch {
+            messages.append(ChatMessage(isUser: false, content: "⚠️ \(error.localizedDescription)"))
+        }
+    }
+
+    private func buildInstruction(for question: String) -> String {
+        var parts: [String] = []
+
+        // Navigation context
+        if let repo = navState.currentRepository {
+            parts.append("Repository: \(repo.nameWithNamespace) (\(repo.visibility))")
+            if let branch = navState.currentBranch {
+                parts.append("Branch: \(branch)")
+            }
+        }
+        if let path = navState.currentFilePath {
+            parts.append("File path: \(path)")
+        }
+
+        // Actual screen content — the most valuable context
+        if let content = navState.currentScreenContent, !content.isEmpty {
+            // Limit to first 3000 chars to stay within token budget
+            let truncated = content.count > 3000
+                ? String(content.prefix(3000)) + "\n…[truncated]"
+                : content
+            parts.append("Current file contents:\n```\n\(truncated)\n```")
+        }
+
+        parts.append("User question: \(question)")
+        return parts.joined(separator: "\n\n")
+    }
+}
+
+// MARK: - AI Assistant Chat View (legacy full-screen version)
+// Kept for use from CommitDetailView / MergeRequestDetailView one-shot responses.
+
+struct AIAssistantChatView: View {
+    @EnvironmentObject var navState: AppNavigationState
+    @ObservedObject private var service = AIAssistantService.shared
+    @Environment(\.dismiss) var dismiss
+
+    @State private var messages: [AIFloatingPanel.ChatMessage] = []
+    @State private var inputText = ""
+    @State private var isThinking = false
+    @FocusState private var inputFocused: Bool
 
     private var contextGreeting: String {
         if let path = navState.currentFilePath {
@@ -33,8 +299,6 @@ struct AIAssistantChatView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-
-                // Context banner
                 if let summary = navState.contextSummary {
                     HStack(spacing: 8) {
                         Image(systemName: "scope")
@@ -51,11 +315,9 @@ struct AIAssistantChatView: View {
                     .background(.ultraThinMaterial)
                 }
 
-                // Message list
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 12) {
-                            // Greeting bubble always first
                             AssistantBubble(text: contextGreeting, isThinking: false)
                                 .padding(.top, 12)
 
@@ -84,7 +346,6 @@ struct AIAssistantChatView: View {
 
                 Divider().opacity(0.4)
 
-                // Input bar
                 HStack(spacing: 10) {
                     TextField("Ask anything…", text: $inputText, axis: .vertical)
                         .lineLimit(1...4)
@@ -100,7 +361,7 @@ struct AIAssistantChatView: View {
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 30))
-                            .foregroundStyle(inputText.isEmpty ? .secondary : .primary)
+                            .foregroundStyle(inputText.isEmpty ? Color.secondary : Color.accentColor)
                     }
                     .disabled(inputText.isEmpty || isThinking)
                 }
@@ -129,32 +390,34 @@ struct AIAssistantChatView: View {
         .presentationDragIndicator(.visible)
     }
 
-    // MARK: - Send
-
     private func send() async {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         inputText = ""
-        messages.append(ChatMessage(isUser: true, content: text))
+        messages.append(AIFloatingPanel.ChatMessage(isUser: true, content: text))
         isThinking = true
         defer { isThinking = false }
 
         do {
             let response = try await service.analyzeCode("", instruction: buildInstruction(for: text))
-            messages.append(ChatMessage(isUser: false, content: response))
+            messages.append(AIFloatingPanel.ChatMessage(isUser: false, content: response))
         } catch {
-            messages.append(ChatMessage(isUser: false, content: "⚠️ \(error.localizedDescription)"))
+            messages.append(AIFloatingPanel.ChatMessage(isUser: false, content: "⚠️ \(error.localizedDescription)"))
         }
     }
 
     private func buildInstruction(for question: String) -> String {
         var parts: [String] = []
-        if let path = navState.currentFilePath {
-            parts.append("The user is viewing file: \(path)")
-        }
+        if let path = navState.currentFilePath { parts.append("File: \(path)") }
         if let repo = navState.currentRepository {
             parts.append("Repository: \(repo.nameWithNamespace) (\(repo.visibility))")
             if let branch = navState.currentBranch { parts.append("Branch: \(branch)") }
+        }
+        if let content = navState.currentScreenContent, !content.isEmpty {
+            let truncated = content.count > 3000
+                ? String(content.prefix(3000)) + "\n…[truncated]"
+                : content
+            parts.append("File contents:\n```\n\(truncated)\n```")
         }
         parts.append("Question: \(question)")
         return parts.joined(separator: "\n")
@@ -173,7 +436,7 @@ struct UserBubble: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(.primary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
     }
 }
@@ -188,7 +451,13 @@ struct AssistantBubble: View {
                 Circle().fill(.ultraThinMaterial).frame(width: 28, height: 28)
                 Image(systemName: "sparkles")
                     .font(.system(size: 12))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.accentColor, .purple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
             }
             Group {
                 if isThinking {
@@ -219,7 +488,7 @@ struct ThinkingDotsView: View {
         HStack(spacing: 5) {
             ForEach(0..<3, id: \.self) { i in
                 Circle()
-                    .fill(.secondary)
+                    .fill(Color.secondary)
                     .frame(width: 7, height: 7)
                     .scaleEffect(animating ? 1 : 0.5)
                     .opacity(animating ? 1 : 0.3)

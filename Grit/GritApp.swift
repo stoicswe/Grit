@@ -23,6 +23,7 @@ struct GritApp: App {
             .environmentObject(settingsStore)
             .environmentObject(navState)
             .preferredColorScheme(settingsStore.colorScheme)
+            .tint(settingsStore.accentColor ?? Color.accentColor)
             .task {
                 await notificationService.requestAuthorization()
             }

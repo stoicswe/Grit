@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject var notificationService: NotificationService
     @State private var showLogoutAlert = false
     @State private var notificationSettings: NotificationSettings = NotificationSettings()
+    @State private var selectedAccentColor: Color = .accentColor
 
     var body: some View {
         NavigationStack {
@@ -16,11 +17,17 @@ struct SettingsView: View {
                 // Appearance section
                 appearanceSection
 
+                // Accent color section
+                colorSection
+
                 // Notifications section
                 notificationsSection
 
                 // AI Assistant section
                 aiSection
+
+                // Translation section (standalone, always visible)
+                translationSection
 
                 // About section
                 aboutSection
@@ -33,6 +40,10 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.large)
             .onAppear {
                 notificationSettings = settingsStore.notificationSettings
+                selectedAccentColor = settingsStore.accentColor ?? .accentColor
+            }
+            .onChange(of: selectedAccentColor) { _, newColor in
+                settingsStore.setAccentColor(newColor)
             }
             .alert("Sign Out", isPresented: $showLogoutAlert) {
                 Button("Sign Out", role: .destructive) {
@@ -181,19 +192,44 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Accent Color
+
+    private var colorSection: some View {
+        Section {
+            HStack {
+                Label("Highlight Color", systemImage: "paintpalette.fill")
+                Spacer()
+                ColorPicker("", selection: $selectedAccentColor, supportsOpacity: false)
+                    .labelsHidden()
+            }
+
+            if settingsStore.accentColor != nil {
+                Button(role: .destructive) {
+                    settingsStore.setAccentColor(nil)
+                    selectedAccentColor = .accentColor
+                } label: {
+                    Label("Reset to Default", systemImage: "arrow.counterclockwise")
+                        .foregroundStyle(.red)
+                }
+            }
+        } header: {
+            Text("Accent Color")
+        } footer: {
+            Text("Sets the highlight color used throughout the app for buttons, links, and interactive elements.")
+        }
+    }
+
     // MARK: - AI
 
     private var aiSection: some View {
         Section {
-            NavigationLink {
-                AIAssistantChatView()
-            } label: {
+            Toggle(isOn: $settingsStore.appleIntelligenceEnabled) {
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("AI Assistant")
+                        Text("Apple Intelligence")
                             .font(.system(size: 15))
                         Text(AIAssistantService.shared.isAvailable
-                             ? "Apple Intelligence · On-device"
+                             ? "On-device · Private"
                              : "Not available on this device")
                             .font(.caption)
                             .foregroundStyle(AIAssistantService.shared.isAvailable ? .green : .secondary)
@@ -202,10 +238,45 @@ struct SettingsView: View {
                     Image(systemName: "sparkles")
                 }
             }
+            .disabled(!AIAssistantService.shared.isAvailable)
+
+            NavigationLink { AppleIntelligenceInfoView() } label: {
+                Label("About Apple Intelligence", systemImage: "info.circle")
+            }
         } header: {
             Text("Intelligence")
         } footer: {
-            Text("AI features use Apple Intelligence on-device models. No data is sent to external servers.")
+            if !AIAssistantService.shared.isAvailable {
+                Text("Apple Intelligence requires iPhone 16 or later running iOS 18.1 or later.")
+            } else if settingsStore.appleIntelligenceEnabled {
+                Text("AI-powered features — commit explanations, code review, and the AI chat panel — are active. All processing runs entirely on-device.")
+            } else {
+                Text("When enabled, AI-powered features like commit explanations, code review, and the AI assistant panel will appear throughout the app. All processing is done on-device.")
+            }
+        }
+    }
+
+    // MARK: - Translation
+
+    private var translationSection: some View {
+        Section {
+            Toggle(isOn: $settingsStore.translateCommentsEnabled) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Translate Comments")
+                            .font(.system(size: 15))
+                        Text("Detect & translate foreign-language comments")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "translate")
+                }
+            }
+        } header: {
+            Text("Translation")
+        } footer: {
+            Text("When enabled, issue comments written in a different language than your device will show a Translate button. Translation runs on-device using Apple's Translation framework — completely private, no text is ever sent to a server.")
         }
     }
 

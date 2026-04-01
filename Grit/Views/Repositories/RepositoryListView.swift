@@ -4,6 +4,7 @@ struct RepositoryListView: View {
     @Binding var showSearch: Bool
     @EnvironmentObject var navState: AppNavigationState
     @StateObject private var viewModel = RepositoryViewModel()
+    @ObservedObject private var starVM = StarredReposViewModel.shared
     @State private var inlineSearchText = ""
     @State private var isInlineSearchActive = false
 
@@ -23,7 +24,10 @@ struct RepositoryListView: View {
                 prompt: "Filter my repositories"
             )
             .onChange(of: inlineSearchText) { _, query in viewModel.search(query: query) }
-            .task { await viewModel.loadRepositories(refresh: true) }
+            .task {
+                await viewModel.loadRepositories(refresh: true)
+                await starVM.loadIfNeeded()
+            }
             .refreshable { await viewModel.loadRepositories(refresh: true) }
             .navigationDestination(for: Repository.self) { repo in
                 RepositoryDetailView(repository: repo)
@@ -32,15 +36,19 @@ struct RepositoryListView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 8) {
-                        // Global search button
-                        Button {
-                            showSearch = true
-                        } label: {
+                        Button { showSearch = true } label: {
                             Image(systemName: "magnifyingglass")
                         }
 
-                        // Context menu — no repo selected at this level
                         Menu {
+                            Section("Repositories") {
+                                NavigationLink {
+                                    StarredReposView()
+                                        .environmentObject(navState)
+                                } label: {
+                                    Label("Starred", systemImage: "star")
+                                }
+                            }
                             Section("App") {
                                 NavigationLink {
                                     SettingsView()
@@ -72,21 +80,19 @@ struct RepositoryListView: View {
             Section {
                 ForEach(viewModel.repositories) { repo in
                     NavigationLink(value: repo) {
-                        RepositoryRowView(repo: repo)
+                        RepositoryRowView(
+                            repo: repo,
+                            isStarred: starVM.isStarred(repo.id),
+                            onToggleStar: { Task { await starVM.toggleStar(repo: repo) } }
+                        )
                     }
                     .listRowBackground(Color.clear)
                 }
 
                 if viewModel.hasMore {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
-                    }
-                    .listRowBackground(Color.clear)
-                    .onAppear {
-                        Task { await viewModel.loadRepositories() }
-                    }
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                        .listRowBackground(Color.clear)
+                        .onAppear { Task { await viewModel.loadRepositories() } }
                 }
             } header: {
                 if !viewModel.repositories.isEmpty {
@@ -110,19 +116,19 @@ struct RepositoryListView: View {
     private var searchResultsList: some View {
         List {
             if viewModel.isSearching {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-                .listRowBackground(Color.clear)
+                HStack { Spacer(); ProgressView(); Spacer() }
+                    .listRowBackground(Color.clear)
             } else if viewModel.searchResults.isEmpty && !inlineSearchText.isEmpty {
                 ContentUnavailableView.search(text: inlineSearchText)
                     .listRowBackground(Color.clear)
             } else {
                 ForEach(viewModel.searchResults) { repo in
                     NavigationLink(value: repo) {
-                        RepositoryRowView(repo: repo)
+                        RepositoryRowView(
+                            repo: repo,
+                            isStarred: starVM.isStarred(repo.id),
+                            onToggleStar: { Task { await starVM.toggleStar(repo: repo) } }
+                        )
                     }
                     .listRowBackground(Color.clear)
                 }
@@ -131,7 +137,7 @@ struct RepositoryListView: View {
         .listStyle(.plain)
     }
 
-    // MARK: - Loading
+    // MARK: - Loading Skeleton
 
     private var loadingOverlay: some View {
         VStack(spacing: 16) {
@@ -155,6 +161,8 @@ struct RepositoryListView: View {
 
 struct RepositoryRowView: View {
     let repo: Repository
+    var isStarred: Bool = false
+    var onToggleStar: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -193,15 +201,7 @@ struct RepositoryRowView: View {
 
                 HStack(spacing: 10) {
                     VisibilityBadge(visibility: repo.visibility)
-
-                    if repo.starCount > 0 {
-                        HStack(spacing: 2) {
-                            Image(systemName: "star.fill").font(.system(size: 9))
-                            Text("\(repo.starCount)").font(.system(size: 11))
-                        }
-                        .foregroundStyle(.secondary)
-                    }
-
+                    starBadge
                     if let activity = repo.lastActivityAt {
                         Text(activity.relativeFormatted)
                             .font(.system(size: 11))
@@ -213,6 +213,31 @@ struct RepositoryRowView: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, 4)
+    }
+
+    // MARK: - Star badge
+
+    @ViewBuilder
+    private var starBadge: some View {
+        if repo.starCount > 0 || onToggleStar != nil {
+            let label = HStack(spacing: 2) {
+                Image(systemName: isStarred ? "star.fill" : "star")
+                    .font(.system(size: 9))
+                    .foregroundStyle(isStarred ? Color.yellow : Color.secondary)
+                if repo.starCount > 0 {
+                    Text("\(repo.starCount)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let action = onToggleStar {
+                Button(action: action) { label }
+                    .buttonStyle(.plain)
+            } else {
+                label
+            }
+        }
     }
 }
 
