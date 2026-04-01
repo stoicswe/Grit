@@ -4,7 +4,6 @@ struct RepositoryDetailView: View {
     let repository: Repository
 
     @StateObject private var viewModel = RepositoryDetailViewModel()
-    @EnvironmentObject var settingsStore: SettingsStore
     @EnvironmentObject var navState: AppNavigationState
     @ObservedObject private var starVM = StarredReposViewModel.shared
 
@@ -136,15 +135,18 @@ struct RepositoryDetailView: View {
     private var repoContextMenu: some View {
         Menu {
             Section("Repository") {
-                let isSubscribed = settingsStore.isSubscribed(to: repository.id)
                 Button {
-                    settingsStore.toggleProjectSubscription(repository.id)
+                    Task { await viewModel.toggleWatch(projectID: repository.id) }
                 } label: {
-                    Label(
-                        isSubscribed ? "Unsubscribe from Notifications" : "Subscribe to Notifications",
-                        systemImage: isSubscribed ? "bell.slash" : "bell.badge"
-                    )
+                    if viewModel.isTogglingWatch {
+                        Label("Updating…", systemImage: "clock")
+                    } else if viewModel.isWatching {
+                        Label("Unwatch Repository", systemImage: "bell.slash")
+                    } else {
+                        Label("Watch Repository", systemImage: "bell.badge")
+                    }
                 }
+                .disabled(viewModel.isTogglingWatch || viewModel.notificationLevel == nil)
 
                 Button {
                     UIPasteboard.general.string = repository.httpURLToRepo

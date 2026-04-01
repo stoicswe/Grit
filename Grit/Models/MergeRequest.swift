@@ -23,8 +23,25 @@ struct MergeRequest: Codable, Identifiable {
     let draft: Bool?
     let hasConflicts: Bool?
     let mergeStatus: String?
+    /// Project this MR belongs to — always present in API responses.
+    let projectID: Int
+    /// Full reference string, e.g. "group/project!42". Used in Inbox for project context.
+    let references: MRReferences?
 
     var isDraft: Bool { draft ?? false }
+
+    struct MRReferences: Codable {
+        let full: String?
+    }
+
+    /// Extracts just the project path from references.full (strips the "!iid" suffix).
+    var projectPath: String? {
+        guard let full = references?.full else { return nil }
+        if let range = full.range(of: "!", options: .backwards) {
+            return String(full[full.startIndex..<range.lowerBound])
+        }
+        return full
+    }
 
     enum MRState: String, Codable {
         case opened, closed, merged, locked
@@ -87,6 +104,8 @@ struct MergeRequest: Codable, Identifiable {
         case diffRefs = "diff_refs"
         case hasConflicts = "has_conflicts"
         case mergeStatus = "merge_status"
+        case projectID = "project_id"
+        case references
     }
 }
 

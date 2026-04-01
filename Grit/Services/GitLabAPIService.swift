@@ -595,6 +595,109 @@ actor GitLabAPIService {
         )
     }
 
+    // MARK: - Project Notification Level (Watch)
+
+    /// Returns the authenticated user's notification level for the given project.
+    func fetchProjectNotificationLevel(
+        projectID: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> ProjectNotificationLevel {
+        return try await request(
+            "projects/\(projectID)/notification_settings",
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    private struct NotificationLevelBody: Encodable { let level: String }
+
+    /// Sets the authenticated user's notification level for the given project.
+    /// Use level "watch" to watch, "global" to restore the user's global default.
+    @discardableResult
+    func setProjectNotificationLevel(
+        projectID: Int,
+        level: String,
+        baseURL: String,
+        token: String
+    ) async throws -> ProjectNotificationLevel {
+        return try await post(
+            "projects/\(projectID)/notification_settings",
+            baseURL: baseURL,
+            token: token,
+            body: NotificationLevelBody(level: level),
+            method: "PUT"
+        )
+    }
+
+    // MARK: - Inbox
+
+    /// Fetches open MRs for the authenticated user by scope.
+    /// - scope: "assigned_to_me" for MRs assigned to the user,
+    ///          "reviewer_of_me" for MRs where the user is a requested reviewer.
+    func fetchInboxMRs(
+        scope: String,
+        baseURL: String,
+        token: String,
+        page: Int = 1
+    ) async throws -> [MergeRequest] {
+        return try await request(
+            "merge_requests",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "scope",    value: scope),
+                URLQueryItem(name: "state",    value: "opened"),
+                URLQueryItem(name: "per_page", value: "50"),
+                URLQueryItem(name: "page",     value: "\(page)"),
+                URLQueryItem(name: "order_by", value: "updated_at"),
+                URLQueryItem(name: "sort",     value: "desc")
+            ]
+        )
+    }
+
+    /// Fetches open issues assigned to the authenticated user.
+    func fetchInboxIssues(
+        baseURL: String,
+        token: String,
+        page: Int = 1
+    ) async throws -> [GitLabIssue] {
+        return try await request(
+            "issues",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "scope",    value: "assigned_to_me"),
+                URLQueryItem(name: "state",    value: "opened"),
+                URLQueryItem(name: "per_page", value: "50"),
+                URLQueryItem(name: "page",     value: "\(page)"),
+                URLQueryItem(name: "order_by", value: "updated_at"),
+                URLQueryItem(name: "sort",     value: "desc")
+            ]
+        )
+    }
+
+    /// Fetches open issues created by the authenticated user.
+    func fetchCreatedIssues(
+        baseURL: String,
+        token: String,
+        page: Int = 1
+    ) async throws -> [GitLabIssue] {
+        return try await request(
+            "issues",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "scope",    value: "created_by_me"),
+                URLQueryItem(name: "state",    value: "opened"),
+                URLQueryItem(name: "per_page", value: "50"),
+                URLQueryItem(name: "page",     value: "\(page)"),
+                URLQueryItem(name: "order_by", value: "updated_at"),
+                URLQueryItem(name: "sort",     value: "desc")
+            ]
+        )
+    }
+
     // MARK: - User Events (Contribution Graph)
 
     func fetchUserEvents(

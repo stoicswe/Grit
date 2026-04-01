@@ -177,7 +177,9 @@ final class MergeRequestViewModel: ObservableObject {
                     changesCount: current.changesCount,
                     diffRefs: current.diffRefs, labels: current.labels,
                     draft: current.draft, hasConflicts: current.hasConflicts,
-                    mergeStatus: "merged"
+                    mergeStatus: "merged",
+                    projectID: current.projectID,
+                    references: current.references
                 )
             }
         } catch {

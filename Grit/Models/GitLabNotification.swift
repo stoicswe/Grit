@@ -35,6 +35,16 @@ struct GitLabNotification: Codable, Identifiable {
     }
 }
 
+// MARK: - Project notification level (from /projects/:id/notification_settings)
+
+/// Represents GitLab's per-project notification level for the authenticated user.
+/// Possible levels: "disabled", "mention", "participating", "watch", "global", "custom"
+struct ProjectNotificationLevel: Codable {
+    let level: String
+}
+
+// MARK: -
+
 struct NotificationSettings: Codable {
     var mergeRequestEvents: Bool
     var pushEvents: Bool

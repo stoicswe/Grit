@@ -151,7 +151,7 @@ struct IssuesView: View {
 
 // MARK: - Issue Row
 
-private struct IssueRowView: View {
+struct IssueRowView: View {
     let issue: GitLabIssue
 
     var body: some View {

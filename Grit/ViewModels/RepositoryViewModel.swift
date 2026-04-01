@@ -98,7 +98,15 @@ final class RepositoryDetailViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
-    private let api = GitLabAPIService.shared
+    /// The user's current notification level for this project as returned by the GitLab API.
+    /// Possible values: "disabled", "mention", "participating", "watch", "global", "custom"
+    @Published var notificationLevel: String? = nil
+    @Published var isTogglingWatch = false
+
+    /// True when the current level is "watch".
+    var isWatching: Bool { notificationLevel == "watch" }
+
+    private let api  = GitLabAPIService.shared
     private let auth = AuthenticationService.shared
 
     func load(projectID: Int) async {
@@ -108,14 +116,14 @@ final class RepositoryDetailViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            async let repoTask = api.fetchRepository(projectID: projectID, baseURL: auth.baseURL, token: token)
+            async let repoTask     = api.fetchRepository(projectID: projectID, baseURL: auth.baseURL, token: token)
             async let branchesTask = api.fetchBranches(projectID: projectID, baseURL: auth.baseURL, token: token)
-            async let mrsTask = api.fetchMergeRequests(projectID: projectID, baseURL: auth.baseURL, token: token)
+            async let mrsTask      = api.fetchMergeRequests(projectID: projectID, baseURL: auth.baseURL, token: token)
 
             let (repo, fetchedBranches, mrs) = try await (repoTask, branchesTask, mrsTask)
-            repository = repo
-            branches = fetchedBranches
-            mergeRequests = mrs
+            repository     = repo
+            branches       = fetchedBranches
+            mergeRequests  = mrs
             selectedBranch = repo.defaultBranch ?? fetchedBranches.first(where: { $0.isDefault })?.name
 
             if let branch = selectedBranch {
@@ -126,6 +134,11 @@ final class RepositoryDetailViewModel: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
+
+        // Fetch watch level independently — a failure here shouldn't break the rest of the view.
+        notificationLevel = (try? await api.fetchProjectNotificationLevel(
+            projectID: projectID, baseURL: auth.baseURL, token: token
+        ))?.level
     }
 
     func loadCommits(projectID: Int, branch: String) async {
@@ -137,6 +150,26 @@ final class RepositoryDetailViewModel: ObservableObject {
             selectedBranch = branch
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    /// Toggles the watch state between "watch" and "global" (the user's default).
+    func toggleWatch(projectID: Int) async {
+        guard let token = auth.accessToken else { return }
+        isTogglingWatch = true
+        defer { isTogglingWatch = false }
+
+        let targetLevel = isWatching ? "global" : "watch"
+        do {
+            let result = try await api.setProjectNotificationLevel(
+                projectID: projectID,
+                level: targetLevel,
+                baseURL: auth.baseURL,
+                token: token
+            )
+            notificationLevel = result.level
+        } catch {
+            self.error = "Could not update watch status: \(error.localizedDescription)"
         }
     }
 }

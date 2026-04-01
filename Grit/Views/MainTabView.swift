@@ -4,16 +4,16 @@ import SwiftUI
 
 enum AppTab: Int, CaseIterable {
     case repositories = 0
-    case explore       = 1
-    case notifications = 2
-    case profile       = 3
+    case explore      = 1
+    case inbox        = 2
+    case profile      = 3
 
     var title: String {
         switch self {
         case .repositories: return "Repositories"
-        case .notifications: return "Notifications"
-        case .explore:       return "Explore"
-        case .profile:       return "Profile"
+        case .explore:      return "Explore"
+        case .inbox:        return "Inbox"
+        case .profile:      return "Profile"
         }
     }
 }
@@ -23,7 +23,7 @@ enum AppTab: Int, CaseIterable {
 struct MainTabView: View {
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var navState: AppNavigationState
-    @StateObject private var notificationVM = NotificationViewModel()
+    @StateObject private var inboxVM = InboxViewModel()
 
     @State private var selectedTab: AppTab = .repositories
     @State private var showAIChat = false
@@ -45,11 +45,12 @@ struct MainTabView: View {
                         .environmentObject(navState)
                 }
 
-                Tab("Notifications", systemImage: "bell", value: AppTab.notifications) {
-                    NotificationsView()
-                        .environmentObject(notificationVM)
+                Tab("Inbox", systemImage: "tray.and.arrow.down", value: AppTab.inbox) {
+                    InboxView()
+                        .environmentObject(inboxVM)
+                        .environmentObject(navState)
                 }
-                .badge(notificationVM.unreadCount)
+                .badge(inboxVM.unreadCount)
 
                 Tab("Profile", systemImage: "person.circle", value: AppTab.profile) {
                     ProfileView()
@@ -80,7 +81,6 @@ struct MainTabView: View {
             if !enabled { showAIChat = false }
         }
         .animation(.spring(duration: 0.35, bounce: 0.1), value: showAIChat)
-        .task { await notificationVM.load() }
         .sheet(isPresented: $showSearch) {
             SearchView()
                 .environmentObject(navState)

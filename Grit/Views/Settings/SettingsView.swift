@@ -176,7 +176,7 @@ struct SettingsView: View {
             Text("Notifications")
         } footer: {
             if notificationService.isAuthorized {
-                Text("Only repositories you've subscribed to will send notifications. Toggle subscriptions in each repository's detail view.")
+                Text("Push notifications are sent for repositories you're watching on GitLab. Toggle watch status from the ••• menu in any repository.")
             }
         }
     }
