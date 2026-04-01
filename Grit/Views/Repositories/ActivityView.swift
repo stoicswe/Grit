@@ -37,11 +37,11 @@ struct ActivityView: View {
 
             Divider()
 
-            Group {
-                if viewModel.isLoading && viewModel.isEmpty && viewModel.error == nil {
-                    loadingSkeleton
-                } else if viewModel.isEmpty && !viewModel.isLoading {
-                    if let errorMessage = viewModel.error {
+            if viewModel.isLoading && viewModel.isEmpty && viewModel.error == nil {
+                loadingSkeleton
+            } else if viewModel.isEmpty && !viewModel.isLoading {
+                if let errorMessage = viewModel.error {
+                    ScrollView {
                         VStack(spacing: 16) {
                             ContentUnavailableView(
                                 "Failed to Load",
@@ -54,18 +54,21 @@ struct ActivityView: View {
                             .buttonStyle(.bordered)
                         }
                         .padding()
-                    } else {
+                    }
+                    .refreshable { await viewModel.load() }
+                } else {
+                    ScrollView {
                         emptyState
                     }
-                } else {
-                    activityList
+                    .refreshable { await viewModel.load() }
                 }
+            } else {
+                activityList
             }
         }
         .navigationTitle("Activity")
         .navigationBarTitleDisplayMode(.large)
         .task { await viewModel.load() }
-        .refreshable { await viewModel.load() }
         // Issue navigation
         .navigationDestination(item: $pendingIssue) { issue in
             IssueDetailView(issue: issue, projectID: pendingIssueProjectID)
@@ -181,6 +184,7 @@ struct ActivityView: View {
             }
         }
         .listStyle(.plain)
+        .refreshable { await viewModel.load() }
     }
 
     // MARK: - Tap Handler

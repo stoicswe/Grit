@@ -14,12 +14,12 @@ struct InboxView: View {
 
                 Divider()
 
-                Group {
-                    if viewModel.isLoading && viewModel.isEmpty && viewModel.error == nil {
-                        loadingSkeleton
-                    } else if viewModel.isEmpty && !viewModel.isLoading {
-                        // Always show an error banner if one exists, even over the empty state.
-                        if let errorMessage = viewModel.error {
+                if viewModel.isLoading && viewModel.isEmpty && viewModel.error == nil {
+                    loadingSkeleton
+                } else if viewModel.isEmpty && !viewModel.isLoading {
+                    // Always show an error banner if one exists, even over the empty state.
+                    if let errorMessage = viewModel.error {
+                        ScrollView {
                             VStack(spacing: 16) {
                                 ContentUnavailableView(
                                     "Failed to Load",
@@ -32,18 +32,21 @@ struct InboxView: View {
                                 .buttonStyle(.bordered)
                             }
                             .padding()
-                        } else {
+                        }
+                        .refreshable { await viewModel.load() }
+                    } else {
+                        ScrollView {
                             emptyState
                         }
-                    } else {
-                        inboxList
+                        .refreshable { await viewModel.load() }
                     }
+                } else {
+                    inboxList
                 }
             }
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.large)
             .task { await viewModel.load() }
-            .refreshable { await viewModel.load() }
             .navigationDestination(for: MRNavigation.self) { nav in
                 MergeRequestDetailView(projectID: nav.projectID, mr: nav.mr)
                     .environmentObject(navState)
@@ -241,6 +244,7 @@ struct InboxView: View {
             }
         }
         .listStyle(.plain)
+        .refreshable { await viewModel.load() }
     }
 
     // MARK: - Section Header
