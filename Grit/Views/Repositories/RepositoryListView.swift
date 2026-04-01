@@ -43,6 +43,12 @@ struct RepositoryListView: View {
                         Menu {
                             Section("Repositories") {
                                 NavigationLink {
+                                    ActivityView()
+                                        .environmentObject(navState)
+                                } label: {
+                                    Label("Activity", systemImage: "waveform")
+                                }
+                                NavigationLink {
                                     StarredReposView()
                                         .environmentObject(navState)
                                 } label: {

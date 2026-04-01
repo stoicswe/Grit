@@ -1,6 +1,6 @@
 import Foundation
 
-struct MergeRequest: Codable, Identifiable {
+struct MergeRequest: Codable, Identifiable, Hashable {
     let id: Int
     let iid: Int
     let title: String
@@ -30,7 +30,7 @@ struct MergeRequest: Codable, Identifiable {
 
     var isDraft: Bool { draft ?? false }
 
-    struct MRReferences: Codable {
+    struct MRReferences: Codable, Hashable {
         let full: String?
     }
 
@@ -65,7 +65,7 @@ struct MergeRequest: Codable, Identifiable {
         }
     }
 
-    struct MRAuthor: Codable, Identifiable {
+    struct MRAuthor: Codable, Identifiable, Hashable {
         let id: Int
         let name: String
         let username: String
@@ -79,7 +79,7 @@ struct MergeRequest: Codable, Identifiable {
         }
     }
 
-    struct DiffRefs: Codable {
+    struct DiffRefs: Codable, Hashable {
         let baseSha: String
         let headSha: String
         let startSha: String

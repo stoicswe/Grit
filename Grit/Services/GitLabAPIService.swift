@@ -269,6 +269,27 @@ actor GitLabAPIService {
         )
     }
 
+    /// Search a project for an issue by title (all states). Used when target_iid is
+    /// absent from an activity event — returns the exact-title match, or the first result.
+    func fetchIssueByTitle(
+        projectID: Int,
+        title: String,
+        baseURL: String,
+        token: String
+    ) async throws -> GitLabIssue? {
+        let results: [GitLabIssue] = try await request(
+            "projects/\(projectID)/issues",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "search",   value: title),
+                URLQueryItem(name: "state",    value: "all"),
+                URLQueryItem(name: "per_page", value: "5")
+            ]
+        )
+        return results.first { $0.title == title } ?? results.first
+    }
+
     func fetchIssues(
         projectID: Int,
         state: String = "opened",
@@ -490,6 +511,27 @@ actor GitLabAPIService {
             baseURL: baseURL,
             token: token
         )
+    }
+
+    /// Search a project for an MR by title (all states). Used when target_iid is
+    /// absent from an activity event — returns the exact-title match, or the first result.
+    func fetchMRByTitle(
+        projectID: Int,
+        title: String,
+        baseURL: String,
+        token: String
+    ) async throws -> MergeRequest? {
+        let results: [MergeRequest] = try await request(
+            "projects/\(projectID)/merge_requests",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "search",   value: title),
+                URLQueryItem(name: "state",    value: "all"),
+                URLQueryItem(name: "per_page", value: "5")
+            ]
+        )
+        return results.first { $0.title == title } ?? results.first
     }
 
     func fetchMRNotes(
@@ -724,6 +766,101 @@ actor GitLabAPIService {
             baseURL: baseURL,
             token: token,
             queryItems: items
+        )
+    }
+
+    // MARK: - Activity Feed
+
+    /// Fetches recent events for a specific project (`GET /projects/:id/events`).
+    /// Used for starred-project activity, where the user may not be a member.
+    func fetchProjectEvents(
+        projectID: Int,
+        baseURL: String,
+        token: String,
+        page: Int = 1
+    ) async throws -> [ActivityEvent] {
+        return try await request(
+            "projects/\(projectID)/events",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "per_page", value: "50"),
+                URLQueryItem(name: "page",     value: "\(page)"),
+                URLQueryItem(name: "sort",     value: "desc")
+            ]
+        )
+    }
+
+    /// Fetches the authenticated user's global activity news feed (`GET /events`).
+    /// Includes events from projects the user is a member of and users they follow.
+    func fetchActivityFeed(
+        baseURL: String,
+        token: String,
+        page: Int = 1
+    ) async throws -> [ActivityEvent] {
+        return try await request(
+            "events",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page",     value: "\(page)"),
+                URLQueryItem(name: "sort",     value: "desc")
+            ]
+        )
+    }
+
+    /// Fetches events authored by the specified user (`GET /users/:id/events`).
+    func fetchUserActivityEvents(
+        userID: Int,
+        baseURL: String,
+        token: String,
+        page: Int = 1
+    ) async throws -> [ActivityEvent] {
+        return try await request(
+            "users/\(userID)/events",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page",     value: "\(page)"),
+                URLQueryItem(name: "sort",     value: "desc")
+            ]
+        )
+    }
+
+    /// Fetches the list of users that the specified user is following.
+    func fetchFollowing(
+        userID: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> [GitLabUser] {
+        return try await request(
+            "users/\(userID)/following",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "per_page", value: "100")
+            ]
+        )
+    }
+
+    /// Fetches projects the authenticated user is a member of.
+    /// Used in ActivityViewModel to identify "Your Projects" events.
+    func fetchMemberProjects(
+        baseURL: String,
+        token: String
+    ) async throws -> [Repository] {
+        return try await request(
+            "projects",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "membership", value: "true"),
+                URLQueryItem(name: "per_page",   value: "100"),
+                URLQueryItem(name: "order_by",   value: "last_activity_at"),
+                URLQueryItem(name: "sort",        value: "desc")
+            ]
         )
     }
 
