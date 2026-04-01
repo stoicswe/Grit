@@ -9,6 +9,7 @@ struct IssueDetailView: View {
 
     @EnvironmentObject var settingsStore: SettingsStore
     @StateObject private var viewModel = IssueDetailViewModel()
+    @ObservedObject private var aiService = AIAssistantService.shared
     @State private var showComposer  = false
     @State private var replyToNote:  GitLabIssueNote? = nil
     @State private var profileForUserID: Int? = nil
@@ -101,7 +102,9 @@ struct IssueDetailView: View {
             }
         }
         .padding(.trailing, 20)
-        .padding(.bottom, 12)
+        // When the AI button is visible it occupies ~80–132 pt from the screen bottom.
+        // Raising the FAB to 64 pt above the safe-area bottom clears that zone.
+        .padding(.bottom, aiService.isUserEnabled ? 64 : 12)
     }
 
     // MARK: - Header Card

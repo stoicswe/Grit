@@ -21,7 +21,7 @@ enum ExploreSort: String, CaseIterable, Identifiable {
         switch self {
         case .stars:          return "star.fill"
         case .recentActivity: return "clock.fill"
-        case .newest:         return "clock.badge.plus"
+        case .newest:         return "plus.circle.fill"
         }
     }
 }

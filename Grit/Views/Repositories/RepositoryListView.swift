@@ -77,8 +77,12 @@ struct RepositoryListView: View {
                 .listRowSeparator(.hidden)
             }
 
+            // Repos sorted so deletion-scheduled ones always appear at the bottom
+            let active  = viewModel.repositories.filter { !$0.isScheduledForDeletion }
+            let pending = viewModel.repositories.filter {  $0.isScheduledForDeletion }
+
             Section {
-                ForEach(viewModel.repositories) { repo in
+                ForEach(active) { repo in
                     NavigationLink(value: repo) {
                         RepositoryRowView(
                             repo: repo,
@@ -100,6 +104,26 @@ struct RepositoryListView: View {
                         .textCase(nil)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            if !pending.isEmpty {
+                Section {
+                    ForEach(pending) { repo in
+                        NavigationLink(value: repo) {
+                            RepositoryRowView(
+                                repo: repo,
+                                isStarred: starVM.isStarred(repo.id),
+                                onToggleStar: { Task { await starVM.toggleStar(repo: repo) } }
+                            )
+                        }
+                        .listRowBackground(Color.clear)
+                    }
+                } header: {
+                    Label("Scheduled for Deletion", systemImage: "trash.fill")
+                        .textCase(nil)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
             }
         }
@@ -208,11 +232,36 @@ struct RepositoryRowView: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
+
+                if repo.isScheduledForDeletion {
+                    deletionBadge
+                }
             }
 
             Spacer(minLength: 0)
         }
         .padding(.vertical, 4)
+        .opacity(repo.isScheduledForDeletion ? 0.72 : 1.0)
+    }
+
+    // MARK: - Deletion badge
+
+    private var deletionBadge: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "trash.fill")
+                .font(.system(size: 9))
+            if let date = repo.markedForDeletionDate {
+                Text("Deletion scheduled · \(date.formatted(.dateTime.month(.abbreviated).day().year()))")
+                    .font(.system(size: 11))
+            } else {
+                Text("Scheduled for deletion")
+                    .font(.system(size: 11))
+            }
+        }
+        .foregroundStyle(.red)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(.red.opacity(0.1), in: Capsule())
     }
 
     // MARK: - Star badge

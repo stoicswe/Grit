@@ -7,6 +7,7 @@ final class MergeRequestViewModel: ObservableObject {
     @Published var selectedMR:      MergeRequest?
     @Published var notes:           [MRNote]         = []
     @Published var isLoading        = false
+    @Published var isPosting        = false
     @Published var isApproving      = false
     @Published var isMerging        = false
     @Published var error:           String?
@@ -186,6 +187,8 @@ final class MergeRequestViewModel: ObservableObject {
 
     func addComment(projectID: Int, mrIID: Int, body: String) async {
         guard let token = auth.accessToken, !body.isEmpty else { return }
+        isPosting = true
+        defer { isPosting = false }
         do {
             let note = try await api.addMRComment(
                 projectID: projectID, mrIID: mrIID,

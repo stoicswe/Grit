@@ -50,5 +50,15 @@ struct StarredReposView: View {
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await starVM.load() }
         .task { await starVM.loadIfNeeded() }
+        // Own destination so value-links here don't depend on the parent NavigationStack
+        .navigationDestination(for: Repository.self) { repo in
+            RepositoryDetailView(repository: repo)
+                .environmentObject(navState)
+        }
+        .onAppear {
+            // Clear any stale error from a previous toggle so it doesn't show up
+            // as a phantom banner every time the user reopens this list.
+            if starVM.error != nil { starVM.error = nil }
+        }
     }
 }

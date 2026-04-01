@@ -16,6 +16,21 @@ struct Repository: Codable, Identifiable, Hashable {
     let namespace: Namespace?
     let statistics: Statistics?
     let archived: Bool?
+    /// ISO 8601 date string (e.g. "2024-05-15") set when the project is queued for deletion.
+    /// Stored as a raw String because GitLab returns a date-only value that the shared
+    /// ISO 8601 datetime decoder would reject.
+    let markedForDeletionAt: String?
+
+    var isScheduledForDeletion: Bool { markedForDeletionAt != nil }
+
+    /// Parsed deletion date for display purposes.
+    var markedForDeletionDate: Date? {
+        guard let s = markedForDeletionAt else { return nil }
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f.date(from: s)
+    }
 
     var displayName: String { name }
 
@@ -59,6 +74,7 @@ struct Repository: Codable, Identifiable, Hashable {
         case forksCount = "forks_count"
         case openIssuesCount = "open_issues_count"
         case lastActivityAt = "last_activity_at"
+        case markedForDeletionAt = "marked_for_deletion_at"
     }
 
     static func == (lhs: Repository, rhs: Repository) -> Bool {

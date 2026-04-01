@@ -10,6 +10,12 @@ actor GitLabAPIService {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
+        // Prevent URLSession from intercepting 304 Not Modified responses and
+        // substituting a stale cached body. GitLab uses 304 as a semantic signal
+        // (e.g. "already starred / already unstarred") — we need to see the real
+        // status code, not a cache-promoted 200 with old data.
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.urlCache = nil
         session = URLSession(configuration: config)
 
         decoder = JSONDecoder()
@@ -90,7 +96,8 @@ actor GitLabAPIService {
         _ endpoint: String,
         baseURL: String,
         token: String,
-        method: String = "POST"
+        method: String = "POST",
+        extraSuccessCodes: Set<Int> = []
     ) async throws {
         guard let url = URL(string: "\(baseURL)/api/v4/\(endpoint)") else {
             throw APIError.invalidURL
@@ -100,9 +107,12 @@ actor GitLabAPIService {
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         let (_, response) = try await session.data(for: req)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
+        }
+        let code = httpResponse.statusCode
+        guard (200...299).contains(code) || extraSuccessCodes.contains(code) else {
+            throw APIError.httpError(code)
         }
     }
 
@@ -173,11 +183,17 @@ actor GitLabAPIService {
     }
 
     func starProject(projectID: Int, baseURL: String, token: String) async throws {
-        try await voidPost("projects/\(projectID)/star", baseURL: baseURL, token: token)
+        // GitLab returns 201 on first star, 304 if already starred — both are success
+        try await voidPost("projects/\(projectID)/star", baseURL: baseURL, token: token,
+                           extraSuccessCodes: [304])
     }
 
     func unstarProject(projectID: Int, baseURL: String, token: String) async throws {
-        try await voidPost("projects/\(projectID)/star", baseURL: baseURL, token: token, method: "DELETE")
+        // GitLab v4 API: POST /projects/:id/unstar
+        // Returns 200 OK (successfully unstarred) or 304 Not Modified (wasn't starred).
+        // The old DELETE /projects/:id/star was a v3 endpoint and returns 404 on modern instances.
+        try await voidPost("projects/\(projectID)/unstar", baseURL: baseURL, token: token,
+                           extraSuccessCodes: [304])
     }
 
     func fetchRepository(projectID: Int, baseURL: String, token: String) async throws -> Repository {

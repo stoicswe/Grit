@@ -9,6 +9,10 @@
 /* Begin PBXBuildFile section */
 		029CC901D17F54F5B660A338 /* ContributionGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E5D398F66E84BDF7A417DBD /* ContributionGraphView.swift */; };
 		05B54180549F3CDDFC1D4118 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 558955B38E723D52C07CF16E /* SettingsView.swift */; };
+		749AA75ABF944EE396C83795 /* DeveloperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F1C0BA55A34C2FBED5A9BF /* DeveloperView.swift */; };
+		A9D884A76E46461CA6E72388 /* ReportIssueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F97E7EE9746448CEB57512D2 /* ReportIssueView.swift */; };
+		953929EDF46B4813B21C57F2 /* TipJarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26CE25C8308404E88229BAA /* TipJarView.swift */; };
+		E631E2AEAAB849CEA395A429 /* TipStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C7AA6E104AA4501B36495F4 /* TipStore.swift */; };
 		0610F80E6F455AB8EC3290F9 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2440FF232278F8DF4DBB98 /* SyntaxHighlighter.swift */; };
 		094A99BA4E9DFECDD79D787A /* CodeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6ADDC24C59B1BCDBC776DDB /* CodeEditorView.swift */; };
 		0B40D248AAD6B802857DBA36 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C241484075FA6059B05EF36 /* ProfileView.swift */; };
@@ -112,6 +116,10 @@
 		4E9E4BBF746BDDBBD3FF1215 /* BranchDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BranchDetailView.swift; sourceTree = "<group>"; };
 		4FC3B798E0EDFD121CFC587E /* FileBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserView.swift; sourceTree = "<group>"; };
 		558955B38E723D52C07CF16E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F3F1C0BA55A34C2FBED5A9BF /* DeveloperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperView.swift; sourceTree = "<group>"; };
+		F97E7EE9746448CEB57512D2 /* ReportIssueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportIssueView.swift; sourceTree = "<group>"; };
+		E26CE25C8308404E88229BAA /* TipJarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarView.swift; sourceTree = "<group>"; };
+		3C7AA6E104AA4501B36495F4 /* TipStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipStore.swift; sourceTree = "<group>"; };
 		58000D19B28511279B52681A /* BranchDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BranchDetailViewModel.swift; sourceTree = "<group>"; };
 		59028B8247018BB2B5DFA710 /* ForksViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForksViewModel.swift; sourceTree = "<group>"; };
 		5AED17E25BC6DA9FBE1774DE /* StarredReposViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarredReposViewModel.swift; sourceTree = "<group>"; };
@@ -246,6 +254,7 @@
 				828C0FA46860191E8D4863D3 /* KeychainService.swift */,
 				888D6FEE270A91ACD3B1398C /* NotificationService.swift */,
 				9A89AC132D8E2943EA1FE0F1 /* SettingsStore.swift */,
+				3C7AA6E104AA4501B36495F4 /* TipStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -294,6 +303,9 @@
 			children = (
 				AD11D744187E96CB58B3482A /* AppleIntelligenceInfoView.swift */,
 				558955B38E723D52C07CF16E /* SettingsView.swift */,
+				F3F1C0BA55A34C2FBED5A9BF /* DeveloperView.swift */,
+				E26CE25C8308404E88229BAA /* TipJarView.swift */,
+				F97E7EE9746448CEB57512D2 /* ReportIssueView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -512,6 +524,10 @@
 				0C0F9CA48040E7A38C4CF648 /* SearchViewModel.swift in Sources */,
 				94C7385809D230C6062325E4 /* SettingsStore.swift in Sources */,
 				05B54180549F3CDDFC1D4118 /* SettingsView.swift in Sources */,
+				749AA75ABF944EE396C83795 /* DeveloperView.swift in Sources */,
+				A9D884A76E46461CA6E72388 /* ReportIssueView.swift in Sources */,
+				953929EDF46B4813B21C57F2 /* TipJarView.swift in Sources */,
+				E631E2AEAAB849CEA395A429 /* TipStore.swift in Sources */,
 				172A3165384DA5D247B8D524 /* StarredReposView.swift in Sources */,
 				B08295856A5AEE65C9C1BEE2 /* StarredReposViewModel.swift in Sources */,
 				0610F80E6F455AB8EC3290F9 /* SyntaxHighlighter.swift in Sources */,

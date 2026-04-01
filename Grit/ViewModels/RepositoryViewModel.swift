@@ -11,29 +11,55 @@ final class RepositoryViewModel: ObservableObject {
     @Published var currentPage = 1
     @Published var hasMore = true
 
+    /// Guards against concurrent pagination calls triggered by SwiftUI
+    /// re-firing the load-more `onAppear` when the list re-renders.
+    private var isPaginating = false
     private var searchTask: Task<Void, Never>?
     private let api = GitLabAPIService.shared
     private let auth = AuthenticationService.shared
 
     func loadRepositories(refresh: Bool = false) async {
         guard let token = auth.accessToken else { return }
-        if refresh { currentPage = 1; hasMore = true }
-        guard hasMore else { return }
+
+        if refresh {
+            // Reset state for a full reload; also cancels any in-flight pagination
+            currentPage  = 1
+            hasMore      = true
+            isPaginating = false
+        } else {
+            // Pagination path — bail if already loading or nothing left
+            guard !isPaginating, hasMore else { return }
+            isPaginating = true
+        }
+
         isLoading = true
-        error = nil
-        defer { isLoading = false }
+        error     = nil
+        defer {
+            isLoading    = false
+            isPaginating = false
+        }
+
+        // Snapshot the page we're about to fetch so we can detect if a
+        // concurrent refresh reset currentPage underneath us while awaiting.
+        let page = currentPage
 
         do {
             let results = try await api.fetchUserRepositories(
-                baseURL: auth.baseURL, token: token, page: currentPage
+                baseURL: auth.baseURL, token: token, page: page
             )
+
             if refresh {
                 repositories = results
-            } else {
-                repositories.append(contentsOf: results)
+            } else if currentPage == page {
+                // Only append if currentPage hasn't been reset by a concurrent
+                // refresh — prevents the stale page from duplicating entries.
+                let existingIDs = Set(repositories.map(\.id))
+                let fresh = results.filter { !existingIDs.contains($0.id) }
+                repositories.append(contentsOf: fresh)
             }
-            hasMore = results.count == 20
-            currentPage += 1
+
+            hasMore     = results.count == 20
+            currentPage = page + 1
         } catch {
             self.error = error.localizedDescription
         }

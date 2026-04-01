@@ -9,7 +9,8 @@ final class StarredReposViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
-    private var hasLoaded = false
+    private var hasLoaded    = false
+    private var togglingIDs: Set<Int> = []   // prevents double-tap race conditions
     private let api  = GitLabAPIService.shared
     private let auth = AuthenticationService.shared
 
@@ -45,6 +46,11 @@ final class StarredReposViewModel: ObservableObject {
 
     func toggleStar(repo: Repository) async {
         guard let token = auth.accessToken else { return }
+        // Drop the tap if a toggle for this repo is already in flight
+        guard !togglingIDs.contains(repo.id) else { return }
+        togglingIDs.insert(repo.id)
+        defer { togglingIDs.remove(repo.id) }
+
         let wasStarred = isStarred(repo.id)
 
         // Optimistic update

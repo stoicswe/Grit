@@ -4,9 +4,13 @@ struct SettingsView: View {
     @EnvironmentObject var authService: AuthenticationService
     @EnvironmentObject var settingsStore: SettingsStore
     @EnvironmentObject var notificationService: NotificationService
+    @Environment(\.openURL) private var openURL
     @State private var showLogoutAlert = false
     @State private var notificationSettings: NotificationSettings = NotificationSettings()
     @State private var selectedAccentColor: Color = .accentColor
+    @State private var showDeveloperBio = false
+    @State private var showTipJar       = false
+    @State private var showReportIssue  = false
 
     var body: some View {
         NavigationStack {
@@ -32,6 +36,9 @@ struct SettingsView: View {
                 // About section
                 aboutSection
 
+                // Support / developer section
+                supportSection
+
                 // Danger zone
                 dangerSection
             }
@@ -45,6 +52,9 @@ struct SettingsView: View {
             .onChange(of: selectedAccentColor) { _, newColor in
                 settingsStore.setAccentColor(newColor)
             }
+            .sheet(isPresented: $showDeveloperBio) { DeveloperView() }
+            .sheet(isPresented: $showTipJar)       { TipJarView() }
+            .sheet(isPresented: $showReportIssue)  { ReportIssueView() }
             .alert("Sign Out", isPresented: $showLogoutAlert) {
                 Button("Sign Out", role: .destructive) {
                     authService.logout()
@@ -300,6 +310,62 @@ struct SettingsView: View {
             }
         } header: {
             Text("About")
+        }
+    }
+
+    // MARK: - Support
+
+    private var supportSection: some View {
+        Section {
+            // Developer bio
+            Button { showDeveloperBio = true } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Made by Nathaniel Knudsen")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.primary)
+                        Text("About the developer")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "person.fill")
+                }
+            }
+
+            // Report an issue
+            Button { showReportIssue = true } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Report an Issue")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.primary)
+                        Text("Send logs to the developer")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "exclamationmark.bubble")
+                }
+            }
+
+            // Tip jar
+            Button { showTipJar = true } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Buy a Coffee")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.primary)
+                        Text("Support development")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "cup.and.saucer.fill")
+                }
+            }
+        } header: {
+            Text("Support")
         }
     }
 

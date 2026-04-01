@@ -9,12 +9,12 @@ struct MergeRequestDetailView: View {
 
     @StateObject private var viewModel = MergeRequestViewModel()
     @EnvironmentObject var settingsStore: SettingsStore
+    @ObservedObject private var aiService = AIAssistantService.shared
 
-    @State private var commentText    = ""
-    @State private var showReviewSheet = false
-    @State private var showAISheet    = false
-    @State private var showDiff       = false
-    @FocusState private var commentFocused: Bool
+    @State private var showAISheet      = false
+    @State private var showDiff         = false
+    @State private var showComposer     = false
+    @State private var replyToNote:     MRNote? = nil
 
     // Profile overlay
     @State private var showProfile      = false
@@ -66,22 +66,12 @@ struct MergeRequestDetailView: View {
         }
         .navigationTitle("!\(mr.iid)")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { showReviewSheet = true } label: {
-                    Label("Review", systemImage: "checkmark.seal")
-                }
-            }
-        }
         // Three independent tasks so they run concurrently
         .task { await viewModel.loadMergeRequestDetail(projectID: projectID, mrIID: mr.iid) }
         .task { await viewModel.loadPermissions(projectID: projectID, mrIID: mr.iid) }
         .task { await viewModel.loadDiffs(projectID: projectID, mrIID: mr.iid) }
-        .sheet(isPresented: $showReviewSheet) {
-            ReviewActionSheet(projectID: projectID, mr: mr, viewModel: viewModel)
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-        }
+        // Floating compose button — inset so it clears the content below
+        .safeAreaInset(edge: .bottom, spacing: 0) { composerFAB }
         .sheet(isPresented: $showAISheet) {
             AIResponseSheet(
                 title: "AI Code Review",
@@ -91,6 +81,19 @@ struct MergeRequestDetailView: View {
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showComposer, onDismiss: { replyToNote = nil }) {
+            MRCommentComposerSheet(
+                replyTo: replyToNote,
+                isPosting: viewModel.isPosting
+            ) { body in
+                Task {
+                    await viewModel.addComment(
+                        projectID: projectID, mrIID: mr.iid, body: body
+                    )
+                    showComposer = false
+                }
+            }
         }
         .overlay {
             if showProfile {
@@ -103,6 +106,26 @@ struct MergeRequestDetailView: View {
                 .transition(.opacity)
             }
         }
+    }
+
+    // MARK: - Floating Compose Button
+
+    private var composerFAB: some View {
+        HStack {
+            Spacer()
+            Button { showComposer = true } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 56, height: 56)
+                    .background(.tint, in: Circle())
+                    .shadow(color: Color.accentColor.opacity(0.45), radius: 14, y: 6)
+            }
+        }
+        .padding(.trailing, 20)
+        // When the AI button is visible it occupies ~80–132 pt from the screen bottom.
+        // Raising the FAB to 64 pt above the safe-area bottom clears that zone.
+        .padding(.bottom, aiService.isUserEnabled ? 64 : 12)
     }
 
     // MARK: - Header Card
@@ -433,7 +456,10 @@ struct MergeRequestDetailView: View {
                                         showProfile = true
                                     }
                                 },
-                                onFocusInput: { commentFocused = true }
+                                onReply: {
+                                    replyToNote = note
+                                    showComposer = true
+                                }
                             )
                             .environmentObject(settingsStore)
                             .padding(.horizontal, 12)
@@ -442,52 +468,8 @@ struct MergeRequestDetailView: View {
                     }
                 }
                 .padding(.bottom, 8)
-
-                // Inline comment input (open MRs only)
-                if liveMR.state == .opened {
-                    commentInput
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                }
-            }
-        } else if !viewModel.isLoading {
-            // No comments yet — show input
-            if liveMR.state == .opened {
-                commentInput.padding(.horizontal)
             }
         }
-    }
-
-    // MARK: - Comment Input
-
-    private var commentInput: some View {
-        GlassCard(padding: 12) {
-            HStack(alignment: .bottom, spacing: 10) {
-                TextField("Leave a comment…", text: $commentText, axis: .vertical)
-                    .font(.system(size: 14))
-                    .lineLimit(1...5)
-                    .focused($commentFocused)
-                    .frame(maxWidth: .infinity)
-
-                if !commentText.isEmpty {
-                    Button {
-                        Task {
-                            await viewModel.addComment(
-                                projectID: projectID, mrIID: mr.iid, body: commentText
-                            )
-                            commentText = ""
-                            commentFocused = false
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 26))
-                            .foregroundStyle(.tint)
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                }
-            }
-        }
-        .animation(.spring(duration: 0.2), value: commentText.isEmpty)
     }
 
     // MARK: - Approve Button
@@ -495,95 +477,113 @@ struct MergeRequestDetailView: View {
     private var approveButton: some View {
         let canAct  = viewModel.userCanApprove && !viewModel.isApproving && !viewModel.isLoadingPerms
         let already = viewModel.userHasApproved
+        let locked  = !canAct && !already && !viewModel.isLoadingPerms
 
         return Button {
             guard canAct else { return }
             Task { await viewModel.approve(projectID: projectID, mrIID: mr.iid) }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 if viewModel.isApproving {
                     ProgressView().tint(.white)
+                } else if locked {
+                    // Locked — clearly readable in a muted container
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Approve Merge Request")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("You don't have permission to approve")
+                            .font(.system(size: 12))
+                            .opacity(0.7)
+                    }
                 } else {
                     Image(systemName: already ? "checkmark.seal.fill" : "checkmark.seal")
                     Text(already ? "Already Approved" : "Approve Merge Request")
                         .fontWeight(.semibold)
                 }
             }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
+            .foregroundStyle(locked ? Color.secondary : Color.white)
+            .frame(maxWidth: .infinity, alignment: locked ? .leading : .center)
+            .padding(.horizontal, locked ? 20 : 0)
             .frame(height: 52)
         }
-        .background(
-            LinearGradient(
-                colors: [.green, .green.opacity(0.7)],
-                startPoint: .leading, endPoint: .trailing
-            ),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .shadow(color: .green.opacity(canAct ? 0.35 : 0.1), radius: 10, y: 4)
-        .opacity(canAct ? 1.0 : 0.45)
-        .overlay(
-            Group {
-                if !canAct && !already && !viewModel.isLoadingPerms {
-                    HStack(spacing: 4) {
-                        Image(systemName: "lock.fill").font(.system(size: 10))
-                        Text("No approval permission").font(.system(size: 11))
-                    }
-                    .foregroundStyle(.white.opacity(0.8))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                }
+        .background {
+            if locked {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.primary.opacity(0.07))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.secondary.opacity(0.35), lineWidth: 1)
+                    )
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: [.green, .green.opacity(0.75)],
+                        startPoint: .leading, endPoint: .trailing
+                    ))
             }
-        )
+        }
+        .shadow(color: .green.opacity(canAct && !already ? 0.35 : 0), radius: 10, y: 4)
         .disabled(!canAct || already)
         .padding(.horizontal)
-        .animation(.easeInOut(duration: 0.25), value: canAct)
+        .animation(.easeInOut(duration: 0.2), value: locked)
     }
 
     // MARK: - Merge Button
 
     private var mergeButton: some View {
         let canAct = viewModel.userCanMerge && !viewModel.isMerging && !viewModel.isLoadingPerms
+        let locked = !canAct && !viewModel.isMerging && !viewModel.isLoadingPerms
 
         return Button {
             guard canAct else { return }
             Task { await viewModel.merge(projectID: projectID, mrIID: mr.iid) }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 if viewModel.isMerging {
                     ProgressView().tint(.white)
+                } else if locked {
+                    // Locked — clearly readable in a muted container
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Merge Request")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("You don't have permission to merge")
+                            .font(.system(size: 12))
+                            .opacity(0.7)
+                    }
                 } else {
                     Image(systemName: "arrow.triangle.merge")
                     Text("Merge Request").fontWeight(.semibold)
                 }
             }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
+            .foregroundStyle(locked ? Color.secondary : Color.white)
+            .frame(maxWidth: .infinity, alignment: locked ? .leading : .center)
+            .padding(.horizontal, locked ? 20 : 0)
             .frame(height: 52)
         }
-        .background(
-            LinearGradient(
-                colors: [Color.accentColor, Color.accentColor.opacity(0.7)],
-                startPoint: .leading, endPoint: .trailing
-            ),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .shadow(color: Color.accentColor.opacity(canAct ? 0.35 : 0.1), radius: 10, y: 4)
-        .opacity(canAct ? 1.0 : 0.45)
-        .overlay(
-            Group {
-                if !canAct && !viewModel.isMerging && !viewModel.isLoadingPerms {
-                    HStack(spacing: 4) {
-                        Image(systemName: "lock.fill").font(.system(size: 10))
-                        Text("No merge permission").font(.system(size: 11))
-                    }
-                    .foregroundStyle(.white.opacity(0.8))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                }
+        .background {
+            if locked {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.primary.opacity(0.07))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.secondary.opacity(0.35), lineWidth: 1)
+                    )
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: [Color.accentColor, Color.accentColor.opacity(0.75)],
+                        startPoint: .leading, endPoint: .trailing
+                    ))
             }
-        )
+        }
+        .shadow(color: Color.accentColor.opacity(canAct ? 0.35 : 0), radius: 10, y: 4)
         .disabled(!canAct)
         .padding(.horizontal)
-        .animation(.easeInOut(duration: 0.25), value: canAct)
+        .animation(.easeInOut(duration: 0.2), value: locked)
     }
 }
 
@@ -594,7 +594,7 @@ private struct MRChatBubble: View {
     let isCurrentUser: Bool
     let isGrouped:     Bool
     let onShowProfile: (Int, String, String?) -> Void
-    let onFocusInput:  () -> Void
+    let onReply:       () -> Void
 
     @EnvironmentObject var settingsStore: SettingsStore
 
@@ -653,7 +653,7 @@ private struct MRChatBubble: View {
                                 }
                             }
                             .onEnded { _ in
-                                if replyTriggered { onFocusInput() }
+                                if replyTriggered { onReply() }
                                 withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
                                     dragOffset = 0
                                 }
@@ -787,6 +787,110 @@ private struct MRChatBubble: View {
         } else {
             Color.clear.background(.ultraThinMaterial)
         }
+    }
+}
+
+// MARK: - MR Comment Composer Sheet
+
+private struct MRCommentComposerSheet: View {
+    let replyTo:   MRNote?
+    let isPosting: Bool
+    let onPost:    (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var text: String
+    @FocusState private var focused: Bool
+
+    init(replyTo: MRNote?, isPosting: Bool, onPost: @escaping (String) -> Void) {
+        self.replyTo   = replyTo
+        self.isPosting = isPosting
+        self.onPost    = onPost
+        if let note = replyTo {
+            let quoted = note.body
+                .components(separatedBy: "\n")
+                .map { "> \($0)" }
+                .joined(separator: "\n")
+            _text = State(initialValue: "> **@\(note.author.username)** wrote:\n\(quoted)\n\n")
+        } else {
+            _text = State(initialValue: "")
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+
+                // Reply context banner
+                if let note = replyTo {
+                    replyBanner(note)
+                    Divider()
+                }
+
+                // Subscription hint
+                HStack(spacing: 5) {
+                    Image(systemName: "bell")
+                        .font(.system(size: 11))
+                    Text("Posting will follow this MR for notifications")
+                        .font(.system(size: 12))
+                }
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
+
+                Divider()
+
+                // Text input
+                TextEditor(text: $text)
+                    .focused($focused)
+                    .font(.system(size: 15))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .navigationTitle(replyTo != nil ? "Reply" : "New Comment")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if isPosting {
+                        ProgressView().scaleEffect(0.8)
+                    } else {
+                        Button("Post") { onPost(text) }
+                            .fontWeight(.semibold)
+                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            .onAppear { focused = true }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func replyBanner(_ note: MRNote) -> some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.accentColor)
+                .frame(width: 3, height: 36)
+            AvatarView(urlString: note.author.avatarURL, name: note.author.name, size: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Replying to \(note.author.name)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tint)
+                Text(note.body.prefix(80))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.accentColor.opacity(0.07))
     }
 }
 
