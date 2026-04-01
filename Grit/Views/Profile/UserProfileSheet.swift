@@ -3,8 +3,8 @@ import SwiftUI
 // MARK: - Overlay wrapper
 
 struct UserProfileOverlay: View {
-    let userID: Int
-    let username: String
+    let userID:    Int
+    let username:  String
     let avatarURL: String?
     @Binding var isPresented: Bool
 
@@ -50,8 +50,13 @@ private struct UserProfileCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Close button row
+            // Top bar: close + optional background-refresh spinner
             HStack {
+                if viewModel.isBackgroundRefreshing {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .padding(.leading, 20)
+                }
                 Spacer()
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
@@ -60,10 +65,9 @@ private struct UserProfileCard: View {
                         .frame(width: 30, height: 30)
                         .background(.quaternary, in: Circle())
                 }
+                .padding(.trailing, 20)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 4)
+            .frame(height: 46)
 
             ScrollView {
                 VStack(spacing: 20) {
@@ -77,6 +81,9 @@ private struct UserProfileCard: View {
                         statsRow(user)
                         if currentUserID != user.id {
                             followButton(userID: user.id)
+                        }
+                        if !viewModel.followers.isEmpty {
+                            followersSection
                         }
                         if !viewModel.repos.isEmpty {
                             reposSection
@@ -158,7 +165,8 @@ private struct UserProfileCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(.quaternary.opacity(0.6),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     // MARK: Follow Button
@@ -171,7 +179,8 @@ private struct UserProfileCard: View {
                 if viewModel.isTogglingFollow {
                     ProgressView().scaleEffect(0.8)
                 } else {
-                    Image(systemName: viewModel.isFollowing ? "person.fill.checkmark" : "person.badge.plus")
+                    Image(systemName: viewModel.isFollowing
+                          ? "person.fill.checkmark" : "person.badge.plus")
                 }
                 Text(viewModel.isFollowing ? "Following" : "Follow")
                     .font(.system(size: 15, weight: .semibold))
@@ -191,11 +200,44 @@ private struct UserProfileCard: View {
         .symbolEffect(.bounce, value: viewModel.isFollowing)
     }
 
+    // MARK: Followers
+
+    private var followersSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GlassSectionHeader(
+                title: "Followers",
+                trailing: "\(viewModel.followers.count)"
+            )
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(viewModel.followers) { follower in
+                        VStack(spacing: 5) {
+                            AvatarView(urlString: follower.avatarURL,
+                                       name: follower.name, size: 40)
+                                .overlay(
+                                    Circle().strokeBorder(.white.opacity(0.15), lineWidth: 1)
+                                )
+                            Text("@\(follower.username)")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .frame(width: 52)
+                        }
+                    }
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
     // MARK: Repos
 
     private var reposSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            GlassSectionHeader(title: "Public Repositories", trailing: "\(viewModel.repos.count)")
+            GlassSectionHeader(title: "Public Repositories",
+                               trailing: "\(viewModel.repos.count)")
             VStack(spacing: 6) {
                 ForEach(viewModel.repos.prefix(5)) { repo in
                     HStack(spacing: 10) {
@@ -225,7 +267,8 @@ private struct UserProfileCard: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(.quaternary.opacity(0.5),
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
         }
@@ -243,7 +286,8 @@ private struct UserProfileCard: View {
             }
             .foregroundStyle(.tint)
             .padding(12)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(.quaternary.opacity(0.5),
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
 

@@ -4,6 +4,12 @@ struct ProfileView: View {
     @EnvironmentObject var authService: AuthenticationService
     @StateObject private var viewModel = ProfileViewModel()
 
+    // Follower profile overlay
+    @State private var showFollowerProfile    = false
+    @State private var followerProfileID:     Int    = 0
+    @State private var followerProfileUsername = ""
+    @State private var followerProfileAvatarURL: String? = nil
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -24,6 +30,10 @@ struct ProfileView: View {
 
                         statsGrid(user)
 
+                        if !viewModel.followers.isEmpty {
+                            followersSection
+                        }
+
                         if !viewModel.ownedRepositories.isEmpty {
                             reposSection
                         }
@@ -37,7 +47,12 @@ struct ProfileView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     HStack(spacing: 8) {
-                        Button { Task { await viewModel.load() } } label: {
+                        if viewModel.isBackgroundRefreshing {
+                            ProgressView().scaleEffect(0.75)
+                        }
+                        Button {
+                            Task { await viewModel.load() }
+                        } label: {
                             Image(systemName: "arrow.clockwise")
                         }
                         Menu {
@@ -55,8 +70,19 @@ struct ProfileView: View {
                 }
             }
         }
-        .task { await viewModel.load() }
+        .onAppear { Task { await viewModel.load() } }
         .refreshable { await viewModel.load() }
+        .overlay {
+            if showFollowerProfile {
+                UserProfileOverlay(
+                    userID:   followerProfileID,
+                    username: followerProfileUsername,
+                    avatarURL: followerProfileAvatarURL,
+                    isPresented: $showFollowerProfile
+                )
+                .transition(.opacity)
+            }
+        }
     }
 
     // MARK: - Subviews
@@ -153,11 +179,7 @@ struct ProfileView: View {
     }
 
     private func contributionStat(
-        value: String,
-        label: String,
-        unit: String,
-        icon: String,
-        color: Color
+        value: String, label: String, unit: String, icon: String, color: Color
     ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
@@ -179,6 +201,53 @@ struct ProfileView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    // MARK: - Followers Section
+
+    private var followersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                GlassSectionHeader(
+                    title: "Followers",
+                    trailing: "\(viewModel.followers.count)"
+                )
+            }
+            .padding(.horizontal)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(viewModel.followers) { follower in
+                        Button {
+                            followerProfileID       = follower.id
+                            followerProfileUsername = follower.username
+                            followerProfileAvatarURL = follower.avatarURL
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                                showFollowerProfile = true
+                            }
+                        } label: {
+                            VStack(spacing: 6) {
+                                AvatarView(urlString: follower.avatarURL,
+                                           name: follower.name, size: 48)
+                                    .overlay(
+                                        Circle().strokeBorder(.white.opacity(0.15), lineWidth: 1)
+                                    )
+                                Text("@\(follower.username)")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .frame(width: 60)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    // MARK: - Repos Section
+
     private var reposSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             GlassSectionHeader(title: "Recent Repositories")
@@ -192,7 +261,8 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(.ultraThinMaterial,
+                        in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(.white.opacity(0.1), lineWidth: 0.5)
@@ -227,28 +297,24 @@ struct ProfileView: View {
             HStack(spacing: 8) {
                 if repo.starCount > 0 {
                     HStack(spacing: 2) {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 10))
-                        Text("\(repo.starCount)")
-                            .font(.caption)
+                        Image(systemName: "star.fill").font(.system(size: 10))
+                        Text("\(repo.starCount)").font(.caption)
                     }
                     .foregroundStyle(.secondary)
                 }
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
 
+    // MARK: - Loading
+
     private var loadingView: some View {
         VStack(spacing: 16) {
             ForEach(0..<3, id: \.self) { _ in
-                ShimmerView()
-                    .frame(height: 80)
-                    .padding(.horizontal)
+                ShimmerView().frame(height: 80).padding(.horizontal)
             }
         }
     }

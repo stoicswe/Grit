@@ -106,3 +106,27 @@ struct MRNote: Codable, Identifiable {
         case updatedAt = "updated_at"
     }
 }
+
+// MARK: - Approval state (from /merge_requests/:iid/approvals)
+
+struct MRApprovalState: Codable {
+    let userHasApproved: Bool
+    let userCanApprove:  Bool
+
+    enum CodingKeys: String, CodingKey {
+        case userHasApproved = "user_has_approved"
+        case userCanApprove  = "user_can_approve"
+    }
+}
+
+// MARK: - Project member (from /members/all/:user_id)
+
+struct ProjectMember: Codable {
+    let id:          Int
+    let accessLevel: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case accessLevel = "access_level"
+    }
+}

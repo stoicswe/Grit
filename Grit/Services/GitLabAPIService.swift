@@ -360,6 +360,12 @@ actor GitLabAPIService {
         ])
     }
 
+    func fetchUserFollowers(userID: Int, baseURL: String, token: String) async throws -> [GitLabUser] {
+        return try await request("users/\(userID)/followers", baseURL: baseURL, token: token, queryItems: [
+            URLQueryItem(name: "per_page", value: "30")
+        ])
+    }
+
     // MARK: - Contributors
 
     /// Returns contributors sorted by commit count (descending).
@@ -517,6 +523,59 @@ actor GitLabAPIService {
             baseURL: baseURL,
             token: token,
             body: NoteBody(body: body)
+        )
+    }
+
+    func fetchMRDiffs(
+        projectID: Int,
+        mrIID: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> [CommitDiff] {
+        return try await request(
+            "projects/\(projectID)/merge_requests/\(mrIID)/diffs",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [URLQueryItem(name: "per_page", value: "50")]
+        )
+    }
+
+    func fetchMRApprovals(
+        projectID: Int,
+        mrIID: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> MRApprovalState {
+        return try await request(
+            "projects/\(projectID)/merge_requests/\(mrIID)/approvals",
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func fetchProjectMemberSelf(
+        projectID: Int,
+        userID: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> ProjectMember {
+        return try await request(
+            "projects/\(projectID)/members/all/\(userID)",
+            baseURL: baseURL,
+            token: token
+        )
+    }
+
+    func mergeMergeRequest(
+        projectID: Int,
+        mrIID: Int,
+        baseURL: String,
+        token: String
+    ) async throws {
+        try await voidPost(
+            "projects/\(projectID)/merge_requests/\(mrIID)/merge",
+            baseURL: baseURL,
+            token: token
         )
     }
 
