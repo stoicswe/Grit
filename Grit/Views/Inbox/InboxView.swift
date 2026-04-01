@@ -15,10 +15,26 @@ struct InboxView: View {
                 Divider()
 
                 Group {
-                    if viewModel.isLoading && viewModel.isEmpty {
+                    if viewModel.isLoading && viewModel.isEmpty && viewModel.error == nil {
                         loadingSkeleton
                     } else if viewModel.isEmpty && !viewModel.isLoading {
-                        emptyState
+                        // Always show an error banner if one exists, even over the empty state.
+                        if let errorMessage = viewModel.error {
+                            VStack(spacing: 16) {
+                                ContentUnavailableView(
+                                    "Failed to Load",
+                                    systemImage: "exclamationmark.triangle",
+                                    description: Text(errorMessage)
+                                )
+                                Button("Retry") {
+                                    Task { await viewModel.load() }
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            .padding()
+                        } else {
+                            emptyState
+                        }
                     } else {
                         inboxList
                     }
@@ -131,10 +147,10 @@ struct InboxView: View {
                 }
             }
 
-            // ── Assigned Issues ───────────────────────────────────────────
-            if viewModel.showAssignedIssues {
+            // ── Tasks (authored AND assigned to me) ───────────────────────
+            if viewModel.showTasks {
                 Section {
-                    ForEach(viewModel.assignedIssues) { issue in
+                    ForEach(viewModel.tasks) { issue in
                         NavigationLink(value: issue) {
                             InboxIssueRow(issue: issue)
                         }
@@ -144,13 +160,13 @@ struct InboxView: View {
                         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                     }
                 } header: {
-                    inboxSectionHeader("Assigned Issues",
-                                       icon: "exclamationmark.circle",
-                                       count: viewModel.assignedIssues.count)
+                    inboxSectionHeader("Tasks",
+                                       icon: "checkmark.square",
+                                       count: viewModel.tasks.count)
                 }
             }
 
-            // ── Created Issues ────────────────────────────────────────────
+            // ── My Open Issues (authored by me, not assigned to me) ───────
             if viewModel.showCreatedIssues {
                 Section {
                     ForEach(viewModel.createdIssues) { issue in
@@ -166,25 +182,6 @@ struct InboxView: View {
                     inboxSectionHeader("My Open Issues",
                                        icon: "pencil.and.list.clipboard",
                                        count: viewModel.createdIssues.count)
-                }
-            }
-
-            // ── Work Items ────────────────────────────────────────────────
-            if viewModel.showWorkItems {
-                Section {
-                    ForEach(viewModel.workItems) { item in
-                        NavigationLink(value: item) {
-                            InboxWorkItemRow(item: item)
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                    }
-                } header: {
-                    inboxSectionHeader("Work Items",
-                                       icon: "checkmark.square",
-                                       count: viewModel.workItems.count)
                 }
             }
 
@@ -272,8 +269,8 @@ struct InboxView: View {
         switch viewModel.activeFilter {
         case .all:           return "All Caught Up"
         case .mergeRequests: return "No Merge Requests"
-        case .issues:        return "No Issues"
-        case .workItems:     return "No Work Items"
+        case .tasks:         return "No Tasks"
+        case .issues:        return "No Open Issues"
         case .notifications: return "No Notifications"
         }
     }
@@ -282,8 +279,8 @@ struct InboxView: View {
         switch viewModel.activeFilter {
         case .all:           return "tray"
         case .mergeRequests: return "arrow.triangle.merge"
+        case .tasks:         return "checkmark.square"
         case .issues:        return "exclamationmark.circle"
-        case .workItems:     return "checkmark.square"
         case .notifications: return "bell.slash"
         }
     }
@@ -291,15 +288,15 @@ struct InboxView: View {
     private var emptyDescription: String {
         switch viewModel.activeFilter {
         case .all:
-            return "No MRs, issues, work items, or notifications are waiting for you."
+            return "No MRs, issues, tasks, or notifications are waiting for you."
         case .mergeRequests:
             return "No merge requests are assigned to you or awaiting your review."
+        case .tasks:
+            return "No open issues are both created and assigned to you."
         case .issues:
-            return "No open issues are assigned to you or created by you."
-        case .workItems:
-            return "No tasks or work items are assigned to you."
+            return "You have no open issues that you haven't already assigned to yourself."
         case .notifications:
-            return "You have no notifications right now."
+            return "You have no pending notifications right now."
         }
     }
 
@@ -426,94 +423,6 @@ private struct InboxMRRow: View {
             .padding(.vertical, 2)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
             .foregroundStyle(.secondary)
-    }
-}
-
-// MARK: - Inbox Work Item Row
-
-private struct InboxWorkItemRow: View {
-    let item: GitLabIssue
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: item.workItemTypeIcon)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(item.isOpen ? Color.accentColor : Color.purple)
-                    .frame(width: 18, height: 18)
-                    .padding(.top, 1)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        Text(item.workItemTypeLabel)
-                            .font(.system(size: 10, weight: .semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.accentColor.opacity(0.12), in: Capsule())
-                            .foregroundStyle(.tint)
-                        Spacer(minLength: 0)
-                    }
-
-                    Text(item.title)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if let path = item.projectPath {
-                        Text(path)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    }
-
-                    HStack(spacing: 8) {
-                        Text("#\(item.iid)")
-                            .font(.system(size: 11, design: .monospaced))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-                            .foregroundStyle(.secondary)
-                        Text(item.author.name)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Text("·").foregroundStyle(.quaternary)
-                        Text(item.updatedAt.relativeFormatted)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-                    }
-
-                    if !item.labels.isEmpty || item.userNotesCount > 0 {
-                        HStack(spacing: 6) {
-                            ForEach(item.labels.prefix(3), id: \.self) { labelChip($0) }
-                            if item.labels.count > 3 {
-                                Text("+\(item.labels.count - 3)")
-                                    .font(.system(size: 10)).foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 0)
-                            if item.userNotesCount > 0 {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "bubble.right").font(.system(size: 10))
-                                    Text("\(item.userNotesCount)").font(.system(size: 11))
-                                }
-                                .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(12)
-        }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(.white.opacity(0.08), lineWidth: 0.5))
-    }
-
-    private func labelChip(_ text: String) -> some View {
-        Text(text).font(.system(size: 10)).lineLimit(1)
-            .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Color.accentColor.opacity(0.12), in: Capsule())
-            .foregroundStyle(.tint)
     }
 }
 

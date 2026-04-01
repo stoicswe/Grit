@@ -5,8 +5,8 @@ import Foundation
 enum InboxFilter: String, CaseIterable, Identifiable {
     case all           = "All"
     case mergeRequests = "MRs"
-    case issues        = "Issues"
-    case workItems     = "Work Items"
+    case tasks         = "Tasks"
+    case issues        = "My Issues"
     case notifications = "Notifications"
 
     var id: String { rawValue }
@@ -15,8 +15,8 @@ enum InboxFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all:           return "tray"
         case .mergeRequests: return "arrow.triangle.merge"
+        case .tasks:         return "checkmark.square"
         case .issues:        return "exclamationmark.circle"
-        case .workItems:     return "checkmark.square"
         case .notifications: return "bell"
         }
     }
@@ -31,12 +31,13 @@ final class InboxViewModel: ObservableObject {
     @Published var activeFilter: InboxFilter = .all
 
     // MARK: Raw data
-    @Published var reviewerMRs:    [MergeRequest]       = []
-    @Published var assignedMRs:    [MergeRequest]       = []
-    @Published var assignedIssues: [GitLabIssue]        = []
-    @Published var createdIssues:  [GitLabIssue]        = []
-    @Published var workItems:      [GitLabIssue]        = []
-    @Published var notifications:  [GitLabNotification] = []
+    @Published var reviewerMRs:   [MergeRequest]       = []
+    @Published var assignedMRs:   [MergeRequest]       = []
+    /// Issues authored AND assigned to the user (self-created tasks).
+    @Published var tasks:         [GitLabIssue]        = []
+    /// Issues authored by the user that are NOT self-assigned.
+    @Published var createdIssues: [GitLabIssue]        = []
+    @Published var notifications: [GitLabNotification] = []
 
     @Published var isLoading = false
     @Published var error: String?
@@ -57,67 +58,76 @@ final class InboxViewModel: ObservableObject {
     var showAssignedMRs: Bool {
         (activeFilter == .all || activeFilter == .mergeRequests) && !assignedMRs.isEmpty
     }
-    var showAssignedIssues: Bool {
-        (activeFilter == .all || activeFilter == .issues) && !assignedIssues.isEmpty
+    var showTasks: Bool {
+        (activeFilter == .all || activeFilter == .tasks) && !tasks.isEmpty
     }
     var showCreatedIssues: Bool {
         (activeFilter == .all || activeFilter == .issues) && !createdIssues.isEmpty
-    }
-    var showWorkItems: Bool {
-        (activeFilter == .all || activeFilter == .workItems) && !workItems.isEmpty
     }
     var showNotifications: Bool {
         (activeFilter == .all || activeFilter == .notifications) && !notifications.isEmpty
     }
 
     var isEmpty: Bool {
-        !showReviewerMRs && !showAssignedMRs && !showAssignedIssues &&
-        !showCreatedIssues && !showWorkItems && !showNotifications
+        !showReviewerMRs && !showAssignedMRs &&
+        !showTasks && !showCreatedIssues && !showNotifications
     }
 
     // MARK: Load
 
     func load() async {
-        guard let token = auth.accessToken else { return }
+        guard let token = auth.accessToken,
+              let currentUser = auth.currentUser else { return }
         isLoading = true
         error = nil
         defer { isLoading = false }
 
-        do {
-            async let reviewerTask      = api.fetchInboxMRs(scope: "reviewer_of_me",
+        let userID = currentUser.id
+
+        // Kick off all four fetches in parallel.
+        // Issues use only author_id (created_by_me); assignee filtering is done on-device
+        // from the assignees array so we avoid the unreliable global scope parameters.
+        async let reviewerTask     = api.fetchReviewerMRs(userID: userID,
+                                                           baseURL: auth.baseURL, token: token)
+        async let assignedMRTask   = api.fetchAssignedMRs(userID: userID,
+                                                           baseURL: auth.baseURL, token: token)
+        async let createdIssueTask = api.fetchCreatedIssues(userID: userID,
                                                              baseURL: auth.baseURL, token: token)
-            async let assignedMRTask    = api.fetchInboxMRs(scope: "assigned_to_me",
-                                                             baseURL: auth.baseURL, token: token)
-            async let assignedIssueTask = api.fetchInboxIssues(baseURL: auth.baseURL, token: token)
-            async let createdIssueTask  = api.fetchCreatedIssues(baseURL: auth.baseURL, token: token)
-            async let notifTask         = api.fetchNotifications(baseURL: auth.baseURL, token: token)
+        async let notifTask        = api.fetchNotifications(baseURL: auth.baseURL, token: token)
 
-            let (rMRs, aMRs, allAssigned, created, notifs) = try await (
-                reviewerTask, assignedMRTask, assignedIssueTask, createdIssueTask, notifTask
-            )
+        // Await each result independently — a failure in one bucket never wipes the others.
+        var rMRs:    [MergeRequest]       = []
+        var aMRs:    [MergeRequest]       = []
+        var created: [GitLabIssue]        = []
+        var notifs:  [GitLabNotification] = []
 
-            // MRs — de-duplicate reviewer/assigned overlap
-            reviewerMRs = rMRs
-            let reviewerIDs = Set(rMRs.map(\.id))
-            assignedMRs = aMRs.filter { !reviewerIDs.contains($0.id) }
+        do { rMRs    = try await reviewerTask }     catch { setFirstError(error) }
+        do { aMRs    = try await assignedMRTask }   catch { setFirstError(error) }
+        do { created = try await createdIssueTask } catch { setFirstError(error) }
+        do { notifs  = try await notifTask }        catch { setFirstError(error) }
 
-            // Issues — split standard issues from work items
-            let standardIssues = allAssigned.filter { !$0.isWorkItem }
-            workItems      = allAssigned.filter { $0.isWorkItem }
-            assignedIssues = standardIssues
+        // MRs — de-duplicate reviewer/assigned overlap
+        reviewerMRs = rMRs
+        let reviewerIDs = Set(rMRs.map(\.id))
+        assignedMRs = aMRs.filter { !reviewerIDs.contains($0.id) }
 
-            // Created issues — exclude any already showing as assigned/work item
-            let assignedIDs = Set(allAssigned.map(\.id))
-            createdIssues = created.filter { !assignedIDs.contains($0.id) }
+        // Issues — on-device split using each issue's assignees array.
+        // Tasks: I authored it AND I'm one of the assignees.
+        // My Open Issues: I authored it but am NOT an assignee.
+        tasks         = created.filter { $0.assignees.contains { $0.id == userID } }
+        createdIssues = created.filter { !$0.assignees.contains { $0.id == userID } }
 
-            // Notifications
-            notifications = notifs
-            notificationService.unreadCount = unreadCount
-            notificationService.setBadgeCount(unreadCount)
+        // Notifications (GitLab Todos API)
+        notifications = notifs
+        notificationService.unreadCount = unreadCount
+        notificationService.setBadgeCount(unreadCount)
+    }
 
-        } catch {
-            self.error = error.localizedDescription
-        }
+    // MARK: Helpers
+
+    /// Records the first error encountered during a parallel load; subsequent errors are ignored.
+    private func setFirstError(_ err: Error) {
+        if error == nil { error = err.localizedDescription }
     }
 
     // MARK: Mark notification read

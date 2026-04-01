@@ -94,6 +94,32 @@ struct GitLabIssue: Codable, Identifiable, Hashable {
         case references
         case issueType  = "issue_type"
     }
+
+    // Custom decoder so that nullable arrays from GitLab (labels, assignees) and
+    // occasionally-missing numeric fields never crash the entire list decode.
+    init(from decoder: Decoder) throws {
+        let c          = try decoder.container(keyedBy: CodingKeys.self)
+        id             = try c.decode(Int.self,         forKey: .id)
+        iid            = try c.decode(Int.self,         forKey: .iid)
+        title          = try c.decode(String.self,      forKey: .title)
+        description    = try c.decodeIfPresent(String.self, forKey: .description)
+        state          = try c.decode(String.self,      forKey: .state)
+        createdAt      = try c.decode(Date.self,        forKey: .createdAt)
+        updatedAt      = try c.decode(Date.self,        forKey: .updatedAt)
+        closedAt       = try c.decodeIfPresent(Date.self,   forKey: .closedAt)
+        // GitLab may return null for labels/assignees on some instances; fall back to [].
+        labels         = (try? c.decode([String].self,      forKey: .labels))     ?? []
+        author         = try c.decode(IssueAuthor.self,     forKey: .author)
+        assignees      = (try? c.decode([IssueAuthor].self, forKey: .assignees))  ?? []
+        webURL         = try c.decode(String.self,          forKey: .webURL)
+        userNotesCount = (try? c.decode(Int.self,           forKey: .userNotesCount)) ?? 0
+        upvotes        = (try? c.decode(Int.self,           forKey: .upvotes))    ?? 0
+        downvotes      = (try? c.decode(Int.self,           forKey: .downvotes))  ?? 0
+        subscribed     = try c.decodeIfPresent(Bool.self,   forKey: .subscribed)
+        projectID      = (try? c.decode(Int.self,           forKey: .projectID))  ?? 0
+        references     = try c.decodeIfPresent(IssueReferences.self, forKey: .references)
+        issueType      = try c.decodeIfPresent(String.self, forKey: .issueType)
+    }
 }
 
 // MARK: - Issue Note

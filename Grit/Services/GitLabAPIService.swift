@@ -632,11 +632,11 @@ actor GitLabAPIService {
 
     // MARK: - Inbox
 
-    /// Fetches open MRs for the authenticated user by scope.
-    /// - scope: "assigned_to_me" for MRs assigned to the user,
-    ///          "reviewer_of_me" for MRs where the user is a requested reviewer.
-    func fetchInboxMRs(
-        scope: String,
+    /// Fetches open MRs where the given user is the assignee.
+    /// Uses explicit `assignee_id` instead of `scope=assigned_to_me` for compatibility
+    /// with self-hosted GitLab instances where the global scope filter may return HTTP 400.
+    func fetchAssignedMRs(
+        userID: Int,
         baseURL: String,
         token: String,
         page: Int = 1
@@ -646,39 +646,45 @@ actor GitLabAPIService {
             baseURL: baseURL,
             token: token,
             queryItems: [
-                URLQueryItem(name: "scope",    value: scope),
-                URLQueryItem(name: "state",    value: "opened"),
-                URLQueryItem(name: "per_page", value: "50"),
-                URLQueryItem(name: "page",     value: "\(page)"),
-                URLQueryItem(name: "order_by", value: "updated_at"),
-                URLQueryItem(name: "sort",     value: "desc")
+                URLQueryItem(name: "assignee_id", value: "\(userID)"),
+                URLQueryItem(name: "state",       value: "opened"),
+                URLQueryItem(name: "per_page",    value: "50"),
+                URLQueryItem(name: "page",        value: "\(page)"),
+                URLQueryItem(name: "order_by",    value: "updated_at"),
+                URLQueryItem(name: "sort",        value: "desc")
             ]
         )
     }
 
-    /// Fetches open issues assigned to the authenticated user.
-    func fetchInboxIssues(
+    /// Fetches open MRs where the given user is a requested reviewer.
+    /// Uses explicit `reviewer_id` instead of `scope=reviewer_of_me` for compatibility
+    /// with self-hosted GitLab instances where the global scope filter may return HTTP 400.
+    func fetchReviewerMRs(
+        userID: Int,
         baseURL: String,
         token: String,
         page: Int = 1
-    ) async throws -> [GitLabIssue] {
+    ) async throws -> [MergeRequest] {
         return try await request(
-            "issues",
+            "merge_requests",
             baseURL: baseURL,
             token: token,
             queryItems: [
-                URLQueryItem(name: "scope",    value: "assigned_to_me"),
-                URLQueryItem(name: "state",    value: "opened"),
-                URLQueryItem(name: "per_page", value: "50"),
-                URLQueryItem(name: "page",     value: "\(page)"),
-                URLQueryItem(name: "order_by", value: "updated_at"),
-                URLQueryItem(name: "sort",     value: "desc")
+                URLQueryItem(name: "reviewer_id", value: "\(userID)"),
+                URLQueryItem(name: "state",       value: "opened"),
+                URLQueryItem(name: "per_page",    value: "50"),
+                URLQueryItem(name: "page",        value: "\(page)"),
+                URLQueryItem(name: "order_by",    value: "updated_at"),
+                URLQueryItem(name: "sort",        value: "desc")
             ]
         )
     }
 
-    /// Fetches open issues created by the authenticated user.
+    /// Fetches open issues authored by the specified user.
+    /// Uses `author_id` rather than `scope=created_by_me` for compatibility with
+    /// self-hosted GitLab instances where the global scope filter may return HTTP 400.
     func fetchCreatedIssues(
+        userID: Int,
         baseURL: String,
         token: String,
         page: Int = 1
@@ -688,12 +694,12 @@ actor GitLabAPIService {
             baseURL: baseURL,
             token: token,
             queryItems: [
-                URLQueryItem(name: "scope",    value: "created_by_me"),
-                URLQueryItem(name: "state",    value: "opened"),
-                URLQueryItem(name: "per_page", value: "50"),
-                URLQueryItem(name: "page",     value: "\(page)"),
-                URLQueryItem(name: "order_by", value: "updated_at"),
-                URLQueryItem(name: "sort",     value: "desc")
+                URLQueryItem(name: "author_id", value: "\(userID)"),
+                URLQueryItem(name: "state",     value: "opened"),
+                URLQueryItem(name: "per_page",  value: "50"),
+                URLQueryItem(name: "page",      value: "\(page)"),
+                URLQueryItem(name: "order_by",  value: "updated_at"),
+                URLQueryItem(name: "sort",      value: "desc")
             ]
         )
     }
@@ -723,18 +729,22 @@ actor GitLabAPIService {
 
     // MARK: - Notifications
 
+    /// Fetches the user's pending todos via GitLab's Todos API (`GET /todos`).
+    /// GitLab does not have a `GET /notifications` endpoint — todos are the equivalent.
     func fetchNotifications(baseURL: String, token: String) async throws -> [GitLabNotification] {
-        return try await request("notifications", baseURL: baseURL, token: token, queryItems: [
+        return try await request("todos", baseURL: baseURL, token: token, queryItems: [
+            URLQueryItem(name: "state",    value: "pending"),
             URLQueryItem(name: "per_page", value: "50")
         ])
     }
 
+    /// Marks a GitLab todo as done (`POST /todos/:id/mark_as_done`).
     func markNotificationRead(id: Int, baseURL: String, token: String) async throws {
         try await voidPost(
-            "notifications/\(id)/mark_as_read",
+            "todos/\(id)/mark_as_done",
             baseURL: baseURL,
             token: token,
-            method: "DELETE"
+            method: "POST"
         )
     }
 
