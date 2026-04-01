@@ -204,7 +204,13 @@ struct RepositoryDetailView: View {
                             Text(repository.nameWithNamespace)
                                 .font(.system(size: 15, weight: .semibold))
                                 .lineLimit(2)
-                            VisibilityBadge(visibility: repository.visibility)
+                            HStack(spacing: 6) {
+                                VisibilityBadge(visibility: repository.visibility)
+                                PipelineStatusBadge(
+                                    pipeline: viewModel.defaultBranchPipeline,
+                                    isLoading: viewModel.isPipelineLoading
+                                )
+                            }
                         }
                         Spacer()
                         // Tap hint chevron

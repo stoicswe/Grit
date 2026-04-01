@@ -27,6 +27,9 @@ struct MergeRequest: Codable, Identifiable, Hashable {
     let projectID: Int
     /// Full reference string, e.g. "group/project!42". Used in Inbox for project context.
     let references: MRReferences?
+    /// The most recent pipeline run against the MR's head commit. Only present on
+    /// single-MR fetches (GET /projects/:id/merge_requests/:iid); nil from list endpoints.
+    let headPipeline: Pipeline?
 
     var isDraft: Bool { draft ?? false }
 
@@ -106,6 +109,7 @@ struct MergeRequest: Codable, Identifiable, Hashable {
         case mergeStatus = "merge_status"
         case projectID = "project_id"
         case references
+        case headPipeline = "head_pipeline"
     }
 }
 

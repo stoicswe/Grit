@@ -17,6 +17,7 @@
 		160880D51970E7B5EB22E28A /* ContributionData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40A12A4C372DD9CF74B08696 /* ContributionData.swift */; };
 		172A3165384DA5D247B8D524 /* StarredReposView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF9E0A6AA973602431F2229 /* StarredReposView.swift */; };
 		AA11BB22CC33DD44EE55FF01 /* ActivityEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF00 /* ActivityEvent.swift */; };
+		BB22CC33DD44EE55FF001133 /* Pipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB22CC33DD44EE55FF001122 /* Pipeline.swift */; };
 		AA11BB22CC33DD44EE55FF03 /* ActivityViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF02 /* ActivityViewModel.swift */; };
 		AA11BB22CC33DD44EE55FF05 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF04 /* ActivityView.swift */; };
 		1C07A75013D83244A69396FB /* MergeRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2ECFFE13A7EEF6AFAE3FE43 /* MergeRequest.swift */; };
@@ -114,6 +115,7 @@
 		3C7AA6E104AA4501B36495F4 /* TipStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipStore.swift; sourceTree = "<group>"; };
 		40A12A4C372DD9CF74B08696 /* ContributionData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributionData.swift; sourceTree = "<group>"; };
 		AA11BB22CC33DD44EE55FF00 /* ActivityEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityEvent.swift; sourceTree = "<group>"; };
+		BB22CC33DD44EE55FF001122 /* Pipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pipeline.swift; sourceTree = "<group>"; };
 		4259FB8FD794C4EAED813F10 /* AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationState.swift; sourceTree = "<group>"; };
 		4592DF4E1391BC8D91879647 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		459EDBFBF9B69A21F0CF48E6 /* GritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GritApp.swift; sourceTree = "<group>"; };
@@ -406,6 +408,7 @@
 				81A3DF281538A24E7A36A97F /* GitLabNotification.swift */,
 				399E41FACC8053BE0C35394A /* GitLabUser.swift */,
 				D2ECFFE13A7EEF6AFAE3FE43 /* MergeRequest.swift */,
+				BB22CC33DD44EE55FF001122 /* Pipeline.swift */,
 				E0FD820925F97003244EC2BC /* Repository.swift */,
 				3BABAE17F5B4BF5DC4123174 /* RepositoryFile.swift */,
 			);
@@ -533,6 +536,7 @@
 				3554FC4BE5657C45DB80FFA7 /* MainTabView.swift in Sources */,
 				D1E3BF505B40D54F593F674A /* MarkdownRendererView.swift in Sources */,
 				1C07A75013D83244A69396FB /* MergeRequest.swift in Sources */,
+				BB22CC33DD44EE55FF001133 /* Pipeline.swift in Sources */,
 				558AED079F514ED0B6E862C3 /* MergeRequestDetailView.swift in Sources */,
 				26FB721EB812D54F1DEEB67B /* MergeRequestListView.swift in Sources */,
 				35CFC5367C935665281A725C /* MergeRequestViewModel.swift in Sources */,

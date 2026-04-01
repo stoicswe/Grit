@@ -143,6 +143,10 @@ struct MergeRequestDetailView: View {
                             .background(.orange.opacity(0.15), in: Capsule())
                             .foregroundStyle(.orange)
                     }
+                    PipelineStatusBadge(
+                        pipeline: liveMR.headPipeline,
+                        isLoading: viewModel.selectedMR == nil && viewModel.isLoading
+                    )
                     Spacer()
                     Text("!\(mr.iid)")
                         .font(.system(size: 12, design: .monospaced))

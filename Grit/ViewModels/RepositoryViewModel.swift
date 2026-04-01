@@ -102,6 +102,9 @@ final class RepositoryDetailViewModel: ObservableObject {
     /// Possible values: "disabled", "mention", "participating", "watch", "global", "custom"
     @Published var notificationLevel: String? = nil
     @Published var isTogglingWatch = false
+    /// Latest pipeline for the default branch; nil when the project has no CI.
+    @Published var defaultBranchPipeline: Pipeline?
+    @Published var isPipelineLoading: Bool = false
 
     /// True when the current level is "watch".
     var isWatching: Bool { notificationLevel == "watch" }
@@ -139,6 +142,16 @@ final class RepositoryDetailViewModel: ObservableObject {
         notificationLevel = (try? await api.fetchProjectNotificationLevel(
             projectID: projectID, baseURL: auth.baseURL, token: token
         ))?.level
+
+        // Fetch the default-branch pipeline status independently; hidden if absent.
+        if let branch = selectedBranch {
+            isPipelineLoading = true
+            defaultBranchPipeline = try? await api.fetchLatestPipeline(
+                projectID: projectID, ref: branch,
+                baseURL: auth.baseURL, token: token
+            )
+            isPipelineLoading = false
+        }
     }
 
     func loadCommits(projectID: Int, branch: String) async {

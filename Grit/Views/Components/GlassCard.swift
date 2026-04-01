@@ -168,6 +168,44 @@ struct MRStateBadge: View {
     }
 }
 
+// MARK: - Pipeline Status Badge
+
+struct PipelineStatusBadge: View {
+    let pipeline: Pipeline?
+    var isLoading: Bool = false
+
+    var body: some View {
+        if isLoading && pipeline == nil {
+            // Checking state — spinner pill
+            HStack(spacing: 4) {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .tint(.secondary)
+                Text("Checking…")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(.secondary.opacity(0.1), in: Capsule())
+            .overlay(Capsule().strokeBorder(.secondary.opacity(0.2), lineWidth: 0.5))
+        } else if let pipeline {
+            HStack(spacing: 4) {
+                Image(systemName: pipeline.icon)
+                    .font(.system(size: 9, weight: .semibold))
+                Text(pipeline.label)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(pipeline.color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(pipeline.color.opacity(0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(pipeline.color.opacity(0.25), lineWidth: 0.5))
+        }
+        // When not loading and no pipeline: render nothing (zero size)
+    }
+}
+
 // MARK: - Visibility Badge
 
 struct VisibilityBadge: View {

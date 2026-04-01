@@ -288,6 +288,28 @@ actor GitLabAPIService {
         )
     }
 
+    /// Fetches the most recent pipeline for a given ref (branch/tag).
+    /// Returns nil when the project has no pipelines or the ref has never been built.
+    func fetchLatestPipeline(
+        projectID: Int,
+        ref: String,
+        baseURL: String,
+        token: String
+    ) async throws -> Pipeline? {
+        let pipelines: [Pipeline] = try await request(
+            "projects/\(projectID)/pipelines",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "ref",       value: ref),
+                URLQueryItem(name: "per_page",  value: "1"),
+                URLQueryItem(name: "order_by",  value: "updated_at"),
+                URLQueryItem(name: "sort",      value: "desc")
+            ]
+        )
+        return pipelines.first
+    }
+
     /// Search a project for an issue by title (all states). Used when target_iid is
     /// absent from an activity event — returns the exact-title match, or the first result.
     func fetchIssueByTitle(
