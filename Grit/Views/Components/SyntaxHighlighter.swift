@@ -177,7 +177,7 @@ struct SyntaxHighlighter {
             .foregroundColor: UIColor.label
         ]
         let full = NSMutableAttributedString(string: code, attributes: attrs)
-        let fullRange = NSRange(code.startIndex..., in: code)
+        _ = NSRange(code.startIndex..., in: code)
 
         // ── Apply tokens (low → high priority) ──────────────────────────
 

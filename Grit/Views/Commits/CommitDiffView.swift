@@ -56,6 +56,7 @@ private struct FileDiffCard: View {
     let file:       ParsedFileDiff
     let isExpanded: Bool
     let onToggle:   () -> Void
+    @State private var cardWidth: CGFloat = 300
 
     var body: some View {
         VStack(spacing: 0) {
@@ -70,6 +71,11 @@ private struct FileDiffCard: View {
                 .strokeBorder(.white.opacity(0.1), lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { newWidth in
+            cardWidth = newWidth
+        }
     }
 
     // MARK: Header
@@ -175,8 +181,8 @@ private struct FileDiffCard: View {
                         DiffLineRow(line: line)
                     }
                 }
-                // Ensure the VStack is at least as wide as the screen
-                .frame(minWidth: UIScreen.main.bounds.width - 32, alignment: .leading)
+                // Ensure the VStack is at least as wide as the card
+                .frame(minWidth: cardWidth, alignment: .leading)
             }
             .background(Color.black.opacity(0.2))
         }

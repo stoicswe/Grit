@@ -4,14 +4,17 @@ import SwiftUI
 
 @MainActor
 final class HighlightViewModel: ObservableObject {
-    @Published var lines: [NSAttributedString] = []
+    @Published var lines: [AttributedString] = []
     @Published var isComputing = true
 
     func compute(content: String, language: CodeLanguage) async {
         isComputing = true
-        // Run regex work off the main thread
+        // Run regex work off the main thread, converting to Sendable AttributedString
         let result = await Task.detached(priority: .userInitiated) {
-            SyntaxHighlighter.highlight(content, language: language)
+            let nsStrings = SyntaxHighlighter.highlight(content, language: language)
+            return nsStrings.map { nsStr in
+                (try? AttributedString(nsStr, including: \.uiKit)) ?? AttributedString(nsStr.string)
+            }
         }.value
         lines = result
         isComputing = false
@@ -94,22 +97,11 @@ struct CodeEditorView: View {
 
     // MARK: - Line renderer
 
-    @ViewBuilder
-    private func codeLine(_ attrStr: NSAttributedString) -> some View {
-        if let attributed = try? AttributedString(attrStr, including: \.uiKit) {
-            Text(attributed)
-                .textSelection(.enabled)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .frame(height: 18, alignment: .leading)
-        } else {
-            Text(attrStr.string)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(.primary)
-                .textSelection(.enabled)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .frame(height: 18, alignment: .leading)
-        }
+    private func codeLine(_ attributed: AttributedString) -> some View {
+        Text(attributed)
+            .textSelection(.enabled)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(height: 18, alignment: .leading)
     }
 }

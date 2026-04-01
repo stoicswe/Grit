@@ -9,10 +9,6 @@
 /* Begin PBXBuildFile section */
 		029CC901D17F54F5B660A338 /* ContributionGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E5D398F66E84BDF7A417DBD /* ContributionGraphView.swift */; };
 		05B54180549F3CDDFC1D4118 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 558955B38E723D52C07CF16E /* SettingsView.swift */; };
-		749AA75ABF944EE396C83795 /* DeveloperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F1C0BA55A34C2FBED5A9BF /* DeveloperView.swift */; };
-		A9D884A76E46461CA6E72388 /* ReportIssueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F97E7EE9746448CEB57512D2 /* ReportIssueView.swift */; };
-		953929EDF46B4813B21C57F2 /* TipJarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26CE25C8308404E88229BAA /* TipJarView.swift */; };
-		E631E2AEAAB849CEA395A429 /* TipStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C7AA6E104AA4501B36495F4 /* TipStore.swift */; };
 		0610F80E6F455AB8EC3290F9 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B2440FF232278F8DF4DBB98 /* SyntaxHighlighter.swift */; };
 		094A99BA4E9DFECDD79D787A /* CodeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6ADDC24C59B1BCDBC776DDB /* CodeEditorView.swift */; };
 		0B40D248AAD6B802857DBA36 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C241484075FA6059B05EF36 /* ProfileView.swift */; };
@@ -48,6 +44,7 @@
 		6317AA6D72D903E9DDB36F1D /* ContributionCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68759726448D00E689FD3E19 /* ContributionCell.swift */; };
 		634B0B3EFB52ED02ED6BEB72 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4592DF4E1391BC8D91879647 /* LoginView.swift */; };
 		63CB91C173C7C57BEBC09BA8 /* GitLabAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46F8A80D10BD8291C59B0941 /* GitLabAPIService.swift */; };
+		749AA75ABF944EE396C83795 /* DeveloperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F1C0BA55A34C2FBED5A9BF /* DeveloperView.swift */; };
 		78CA9EB1B9BFE6E4F74EB16A /* IssuesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CEF81EAA1852A927BFCD8D /* IssuesView.swift */; };
 		7A586F2D3BB11113A7033D8F /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888D6FEE270A91ACD3B1398C /* NotificationService.swift */; };
 		7B9071F9F559B266F3518252 /* FileBrowserViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0ECB34A910EAC6AC26CA025 /* FileBrowserViewModel.swift */; };
@@ -57,8 +54,10 @@
 		9141A87E94A8D417498B1669 /* RepositoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ACCD29C6EA5FC26D052054C /* RepositoryViewModel.swift */; };
 		94C7385809D230C6062325E4 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A89AC132D8E2943EA1FE0F1 /* SettingsStore.swift */; };
 		94D721351D3C43FB5C6CF2E6 /* Repository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0FD820925F97003244EC2BC /* Repository.swift */; };
+		953929EDF46B4813B21C57F2 /* TipJarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E26CE25C8308404E88229BAA /* TipJarView.swift */; };
 		9BB008A9C29AD265C43F02F3 /* GitLabIssue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C302B48DFAE3703CE4ED8C1 /* GitLabIssue.swift */; };
 		9BE737834EC20612D6B24A98 /* AppleIntelligenceInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD11D744187E96CB58B3482A /* AppleIntelligenceInfoView.swift */; };
+		A9D884A76E46461CA6E72388 /* ReportIssueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F97E7EE9746448CEB57512D2 /* ReportIssueView.swift */; };
 		AA11BB22CC33DD44EE55FF66 /* UserProfileSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB22CC33DD44EE55FF66AA11 /* UserProfileSheet.swift */; };
 		AC5628097660E7307F163719 /* GitLabNotification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A3DF281538A24E7A36A97F /* GitLabNotification.swift */; };
 		B08295856A5AEE65C9C1BEE2 /* StarredReposViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AED17E25BC6DA9FBE1774DE /* StarredReposViewModel.swift */; };
@@ -77,6 +76,7 @@
 		E11EE96423846C82947D285C /* RepoInfoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C04F8F648E67254F8E88CA2A /* RepoInfoSheet.swift */; };
 		E41EECED7BD2EF14D65329C1 /* IssuesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33A67EAAF6088AF70780494A /* IssuesViewModel.swift */; };
 		E522D24373CEE2B96773BF08 /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 654A118421ACCB09ADD68A09 /* AuthenticationService.swift */; };
+		E631E2AEAAB849CEA395A429 /* TipStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C7AA6E104AA4501B36495F4 /* TipStore.swift */; };
 		F9C754E021FFE5C3E8F7A705 /* CommitDiffViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 235F3DA70927577C59CB64CF /* CommitDiffViewModel.swift */; };
 		FBEA48CD84498AFD2B1E7845 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 893EE940F49561E84C6A42C4 /* Assets.xcassets */; };
 		FCDFC0AE0BEA17BEAECF71A4 /* NotificationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E343DC68D7F7FBFE8F71AF5 /* NotificationViewModel.swift */; };
@@ -105,6 +105,7 @@
 		37EFF949C8C5FA57DEDF967F /* Grit.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Grit.entitlements; sourceTree = "<group>"; };
 		399E41FACC8053BE0C35394A /* GitLabUser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitLabUser.swift; sourceTree = "<group>"; };
 		3BABAE17F5B4BF5DC4123174 /* RepositoryFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryFile.swift; sourceTree = "<group>"; };
+		3C7AA6E104AA4501B36495F4 /* TipStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipStore.swift; sourceTree = "<group>"; };
 		40A12A4C372DD9CF74B08696 /* ContributionData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributionData.swift; sourceTree = "<group>"; };
 		4259FB8FD794C4EAED813F10 /* AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationState.swift; sourceTree = "<group>"; };
 		4592DF4E1391BC8D91879647 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
@@ -116,10 +117,6 @@
 		4E9E4BBF746BDDBBD3FF1215 /* BranchDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BranchDetailView.swift; sourceTree = "<group>"; };
 		4FC3B798E0EDFD121CFC587E /* FileBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserView.swift; sourceTree = "<group>"; };
 		558955B38E723D52C07CF16E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		F3F1C0BA55A34C2FBED5A9BF /* DeveloperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperView.swift; sourceTree = "<group>"; };
-		F97E7EE9746448CEB57512D2 /* ReportIssueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportIssueView.swift; sourceTree = "<group>"; };
-		E26CE25C8308404E88229BAA /* TipJarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarView.swift; sourceTree = "<group>"; };
-		3C7AA6E104AA4501B36495F4 /* TipStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipStore.swift; sourceTree = "<group>"; };
 		58000D19B28511279B52681A /* BranchDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BranchDetailViewModel.swift; sourceTree = "<group>"; };
 		59028B8247018BB2B5DFA710 /* ForksViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForksViewModel.swift; sourceTree = "<group>"; };
 		5AED17E25BC6DA9FBE1774DE /* StarredReposViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarredReposViewModel.swift; sourceTree = "<group>"; };
@@ -156,9 +153,12 @@
 		DD44EE55FF66AA11BB22CC33 /* UserProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileViewModel.swift; sourceTree = "<group>"; };
 		DF6E693356EA96ABDE3D6487 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		E0FD820925F97003244EC2BC /* Repository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Repository.swift; sourceTree = "<group>"; };
+		E26CE25C8308404E88229BAA /* TipJarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipJarView.swift; sourceTree = "<group>"; };
 		E4088BB6C4C9D3D7A93DB6BA /* RepositoryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryDetailView.swift; sourceTree = "<group>"; };
 		E8B939A2F2CA6B894AFBC6A6 /* CommitDiff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitDiff.swift; sourceTree = "<group>"; };
 		EBA766C393F5375349C783AA /* MergeRequestListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeRequestListView.swift; sourceTree = "<group>"; };
+		F3F1C0BA55A34C2FBED5A9BF /* DeveloperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperView.swift; sourceTree = "<group>"; };
+		F97E7EE9746448CEB57512D2 /* ReportIssueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportIssueView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -424,7 +424,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1630;
+				LastUpgradeCheck = 2640;
 			};
 			buildConfigurationList = B9FA15CF0BD3120F6D23BA4D /* Build configuration list for PBXProject "Grit" */;
 			developmentRegion = en;
@@ -543,6 +543,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -574,7 +575,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = P22P7U46RW;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -590,6 +591,7 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -606,7 +608,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Grit/Grit.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = P22P7U46RW;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Grit/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -625,6 +626,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -656,7 +658,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = P22P7U46RW;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -679,6 +681,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -695,7 +698,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Grit/Grit.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = P22P7U46RW;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Grit/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
