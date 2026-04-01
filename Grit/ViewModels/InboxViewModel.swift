@@ -130,6 +130,33 @@ final class InboxViewModel: ObservableObject {
         if error == nil { error = err.localizedDescription }
     }
 
+    // MARK: Close / reopen task
+
+    /// Optimistically removes the task from the list, calls the GitLab API, and
+    /// restores it at its original position if the request fails.
+    func closeTask(_ issue: GitLabIssue) async {
+        guard let token = auth.accessToken else { return }
+
+        // Optimistic remove — instant feedback with no spinner needed.
+        guard let idx = tasks.firstIndex(where: { $0.id == issue.id }) else { return }
+        tasks.remove(at: idx)
+
+        do {
+            _ = try await api.setIssueState(
+                projectID: issue.projectID,
+                issueIID:  issue.iid,
+                open:      false,
+                baseURL:   auth.baseURL,
+                token:     token
+            )
+        } catch {
+            // Restore at the original index so the list doesn't jump around.
+            let insertAt = min(idx, tasks.count)
+            tasks.insert(issue, at: insertAt)
+            self.error = error.localizedDescription
+        }
+    }
+
     // MARK: Mark notification read
 
     func markRead(_ notification: GitLabNotification) async {

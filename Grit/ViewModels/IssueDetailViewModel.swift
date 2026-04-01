@@ -2,14 +2,17 @@ import Foundation
 
 @MainActor
 final class IssueDetailViewModel: ObservableObject {
-    @Published var notes:                 [GitLabIssueNote] = []
-    @Published var isSubscribed:          Bool = false
-    @Published var isLoadingNotes:        Bool = false
+    @Published var notes:                  [GitLabIssueNote] = []
+    @Published var isSubscribed:           Bool = false
+    @Published var isLoadingNotes:         Bool = false
     @Published var isPosting:             Bool = false
     @Published var isTogglingSubscription: Bool = false
-    @Published var error:                 String?
+    @Published var isTogglingState:        Bool = false
+    /// Live open/closed state — updated optimistically and confirmed from the API response.
+    @Published var isOpen:                 Bool = true
+    @Published var error:                  String?
     /// ID of the authenticated user — used to distinguish "my" bubbles from others'.
-    @Published var currentUserID:         Int?
+    @Published var currentUserID:          Int?
 
     private let api  = GitLabAPIService.shared
     private let auth = AuthenticationService.shared
@@ -18,6 +21,9 @@ final class IssueDetailViewModel: ObservableObject {
 
     func load(projectID: Int, issue: GitLabIssue) async {
         guard let token = auth.accessToken else { return }
+        // Seed live state from the passed issue immediately so the button renders
+        // correctly before the network fetch completes.
+        isOpen = issue.isOpen
         isLoadingNotes = true
         error = nil
         defer { isLoadingNotes = false }
@@ -37,8 +43,32 @@ final class IssueDetailViewModel: ObservableObject {
             let (fetched, detail, user) = try await (notesTask, detailTask, userTask)
             notes         = fetched
             isSubscribed  = detail.subscribed ?? false
+            isOpen        = detail.isOpen
             currentUserID = user.id
         } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    // MARK: - Close / Reopen
+
+    func toggleState(projectID: Int, issueIID: Int) async {
+        guard let token = auth.accessToken else { return }
+        isTogglingState = true
+        defer { isTogglingState = false }
+        let previous = isOpen
+        isOpen.toggle()  // optimistic
+        do {
+            let updated = try await api.setIssueState(
+                projectID: projectID,
+                issueIID:  issueIID,
+                open:      !previous,   // !previous because we're toggling away from it
+                baseURL:   auth.baseURL,
+                token:     token
+            )
+            isOpen = updated.isOpen  // confirm with server's actual state
+        } catch {
+            isOpen = previous  // rollback
             self.error = error.localizedDescription
         }
     }

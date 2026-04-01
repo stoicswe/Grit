@@ -37,7 +37,12 @@ struct IssueDetailView: View {
         .navigationTitle("#\(issue.iid)")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) { followButton }
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 14) {
+                    stateToggleButton
+                    followButton
+                }
+            }
         }
         .task { await viewModel.load(projectID: projectID, issue: issue) }
         // Floating compose button inset so it doesn't obscure content
@@ -68,6 +73,27 @@ struct IssueDetailView: View {
                 }
             }
         }
+    }
+
+    // MARK: - State Toggle Button (Close / Reopen)
+
+    private var stateToggleButton: some View {
+        Button {
+            Task { await viewModel.toggleState(projectID: projectID, issueIID: issue.iid) }
+        } label: {
+            if viewModel.isTogglingState {
+                ProgressView().scaleEffect(0.8)
+            } else if viewModel.isOpen {
+                Label("Close Issue", systemImage: "xmark.circle")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.red)
+            } else {
+                Label("Reopen Issue", systemImage: "arrow.counterclockwise.circle")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.green)
+            }
+        }
+        .disabled(viewModel.isTogglingState)
     }
 
     // MARK: - Follow Button
@@ -159,18 +185,20 @@ struct IssueDetailView: View {
     }
 
     private var issueStateBadge: some View {
-        let isOpen = issue.isOpen
+        // Use viewModel.isOpen (live) rather than issue.isOpen (immutable snapshot) so
+        // the badge updates immediately when the user closes or reopens from this view.
+        let open = viewModel.isOpen
         return HStack(spacing: 5) {
             Circle()
-                .fill(isOpen ? Color.green : Color.purple)
+                .fill(open ? Color.green : Color.purple)
                 .frame(width: 8, height: 8)
-            Text(isOpen ? "Open" : "Closed")
+            Text(open ? "Open" : "Closed")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(isOpen ? .green : .purple)
+                .foregroundStyle(open ? .green : .purple)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background((isOpen ? Color.green : Color.purple).opacity(0.12), in: Capsule())
+        .background((open ? Color.green : Color.purple).opacity(0.12), in: Capsule())
     }
 
     // MARK: - Stats Row

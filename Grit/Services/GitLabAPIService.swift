@@ -269,6 +269,25 @@ actor GitLabAPIService {
         )
     }
 
+    /// Close (or reopen) an issue via PUT /projects/:id/issues/:iid with state_event.
+    /// Returns the updated issue so callers can replace their local copy.
+    func setIssueState(
+        projectID: Int,
+        issueIID: Int,
+        open: Bool,
+        baseURL: String,
+        token: String
+    ) async throws -> GitLabIssue {
+        struct Body: Encodable { let state_event: String }
+        return try await post(
+            "projects/\(projectID)/issues/\(issueIID)",
+            baseURL: baseURL,
+            token: token,
+            body: Body(state_event: open ? "reopen" : "close"),
+            method: "PUT"
+        )
+    }
+
     /// Search a project for an issue by title (all states). Used when target_iid is
     /// absent from an activity event — returns the exact-title match, or the first result.
     func fetchIssueByTitle(
