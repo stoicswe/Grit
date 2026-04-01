@@ -69,7 +69,7 @@ private struct RepoInfoCard: View {
             // ── Top bar (title + close) ────────────────────────────────────
             cardTopBar
 
-            Divider().opacity(0.4)
+            Divider().opacity(0.6)
 
             // ── Scrollable body ────────────────────────────────────────────
             ScrollView {
@@ -87,12 +87,13 @@ private struct RepoInfoCard: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.25), radius: 32, y: 12)
+                .fill(.regularMaterial)
+                .shadow(color: .black.opacity(0.22), radius: 40, y: 16)
+                .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(.white.opacity(0.18), lineWidth: 0.5)
+                .strokeBorder(Color(.separator).opacity(0.55), lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
@@ -104,11 +105,11 @@ private struct RepoInfoCard: View {
             // Repo icon
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                    .fill(Color(.tertiarySystemFill))
                     .frame(width: 40, height: 40)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(.white.opacity(0.15), lineWidth: 0.5)
+                            .strokeBorder(Color(.separator).opacity(0.4), lineWidth: 0.5)
                     )
                 Image(systemName: repository.visibility == "private" ? "lock.fill" : "folder.fill")
                     .font(.system(size: 17, weight: .medium))
@@ -187,7 +188,7 @@ private struct RepoInfoCard: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func formatBytes(_ bytes: Int) -> String {
@@ -258,7 +259,7 @@ private struct RepoInfoCard: View {
                             .foregroundStyle(.tertiary)
                     }
                     .padding(12)
-                    .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
