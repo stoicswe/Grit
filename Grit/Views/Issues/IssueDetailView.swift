@@ -39,7 +39,9 @@ struct IssueDetailView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 14) {
-                    stateToggleButton
+                    if viewModel.canCloseIssue {
+                        stateToggleButton
+                    }
                     followButton
                 }
             }

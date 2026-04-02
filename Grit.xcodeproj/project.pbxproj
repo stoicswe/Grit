@@ -16,10 +16,8 @@
 		0C5323777160A0D18FE5D287 /* GitLabUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 399E41FACC8053BE0C35394A /* GitLabUser.swift */; };
 		160880D51970E7B5EB22E28A /* ContributionData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40A12A4C372DD9CF74B08696 /* ContributionData.swift */; };
 		172A3165384DA5D247B8D524 /* StarredReposView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF9E0A6AA973602431F2229 /* StarredReposView.swift */; };
-		AA11BB22CC33DD44EE55FF01 /* ActivityEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF00 /* ActivityEvent.swift */; };
-		BB22CC33DD44EE55FF001133 /* Pipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB22CC33DD44EE55FF001122 /* Pipeline.swift */; };
-		AA11BB22CC33DD44EE55FF03 /* ActivityViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF02 /* ActivityViewModel.swift */; };
-		AA11BB22CC33DD44EE55FF05 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF04 /* ActivityView.swift */; };
+		AA11BB22CC33DD44EE551101 /* WatchingReposView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550101 /* WatchingReposView.swift */; };
+		AA11BB22CC33DD44EE551102 /* WatchingReposViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550102 /* WatchingReposViewModel.swift */; };
 		1C07A75013D83244A69396FB /* MergeRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2ECFFE13A7EEF6AFAE3FE43 /* MergeRequest.swift */; };
 		25342B40F527DD36EBFF6A5C /* CommitListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EE8006AF01DFF08478ABC96 /* CommitListView.swift */; };
 		26FB721EB812D54F1DEEB67B /* MergeRequestListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA766C393F5375349C783AA /* MergeRequestListView.swift */; };
@@ -64,12 +62,16 @@
 		9BB008A9C29AD265C43F02F3 /* GitLabIssue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C302B48DFAE3703CE4ED8C1 /* GitLabIssue.swift */; };
 		9BE737834EC20612D6B24A98 /* AppleIntelligenceInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD11D744187E96CB58B3482A /* AppleIntelligenceInfoView.swift */; };
 		A9D884A76E46461CA6E72388 /* ReportIssueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F97E7EE9746448CEB57512D2 /* ReportIssueView.swift */; };
+		AA11BB22CC33DD44EE55FF01 /* ActivityEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF00 /* ActivityEvent.swift */; };
+		AA11BB22CC33DD44EE55FF03 /* ActivityViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF02 /* ActivityViewModel.swift */; };
+		AA11BB22CC33DD44EE55FF05 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF04 /* ActivityView.swift */; };
 		AA11BB22CC33DD44EE55FF66 /* UserProfileSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB22CC33DD44EE55FF66AA11 /* UserProfileSheet.swift */; };
 		AC5628097660E7307F163719 /* GitLabNotification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A3DF281538A24E7A36A97F /* GitLabNotification.swift */; };
 		B08295856A5AEE65C9C1BEE2 /* StarredReposViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AED17E25BC6DA9FBE1774DE /* StarredReposViewModel.swift */; };
 		B2FAE41C16D0F1F62DE495DA /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF6E693356EA96ABDE3D6487 /* GlassCard.swift */; };
 		B43BF3F832AFF56E4FB74D8B /* GitLabContributor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12B1EDA6F4DCEE63BE5D85FC /* GitLabContributor.swift */; };
 		BA8C2A7ADC9BBCE41E02131E /* RepositoryFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BABAE17F5B4BF5DC4123174 /* RepositoryFile.swift */; };
+		BB22CC33DD44EE55FF001133 /* Pipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB22CC33DD44EE55FF001122 /* Pipeline.swift */; };
 		BCCF530772B55F8F6490CE61 /* RepositoryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DE05624EBCF0AD3AEF75BF4 /* RepositoryListView.swift */; };
 		C3F5AD601091C9E336E56403 /* CommitDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8B939A2F2CA6B894AFBC6A6 /* CommitDiff.swift */; };
 		CB11F800A89957001CA5D37B /* IssueDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E74628D4516B2FDFBA7F2F1 /* IssueDetailView.swift */; };
@@ -114,8 +116,6 @@
 		3BABAE17F5B4BF5DC4123174 /* RepositoryFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryFile.swift; sourceTree = "<group>"; };
 		3C7AA6E104AA4501B36495F4 /* TipStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipStore.swift; sourceTree = "<group>"; };
 		40A12A4C372DD9CF74B08696 /* ContributionData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributionData.swift; sourceTree = "<group>"; };
-		AA11BB22CC33DD44EE55FF00 /* ActivityEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityEvent.swift; sourceTree = "<group>"; };
-		BB22CC33DD44EE55FF001122 /* Pipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pipeline.swift; sourceTree = "<group>"; };
 		4259FB8FD794C4EAED813F10 /* AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationState.swift; sourceTree = "<group>"; };
 		4592DF4E1391BC8D91879647 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		459EDBFBF9B69A21F0CF48E6 /* GritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GritApp.swift; sourceTree = "<group>"; };
@@ -130,7 +130,6 @@
 		58000D19B28511279B52681A /* BranchDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BranchDetailViewModel.swift; sourceTree = "<group>"; };
 		59028B8247018BB2B5DFA710 /* ForksViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForksViewModel.swift; sourceTree = "<group>"; };
 		5AED17E25BC6DA9FBE1774DE /* StarredReposViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarredReposViewModel.swift; sourceTree = "<group>"; };
-		AA11BB22CC33DD44EE55FF02 /* ActivityViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityViewModel.swift; sourceTree = "<group>"; };
 		5EE70A64CE6E87A8F40B9BE9 /* AvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarView.swift; sourceTree = "<group>"; };
 		6540D8BA534465C0FBB56DD3 /* MergeRequestDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeRequestDetailView.swift; sourceTree = "<group>"; };
 		654A118421ACCB09ADD68A09 /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
@@ -148,14 +147,19 @@
 		9A89AC132D8E2943EA1FE0F1 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		9F86BDA302F7AFA52B4EA5B9 /* AIAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantView.swift; sourceTree = "<group>"; };
 		A297F3101454A355AF3C3EA2 /* CommitDiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitDiffView.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE55FF00 /* ActivityEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityEvent.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE55FF02 /* ActivityViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityViewModel.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE55FF04 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
 		AD11D744187E96CB58B3482A /* AppleIntelligenceInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligenceInfoView.swift; sourceTree = "<group>"; };
 		B0CEF81EAA1852A927BFCD8D /* IssuesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssuesView.swift; sourceTree = "<group>"; };
 		B0ECB34A910EAC6AC26CA025 /* FileBrowserViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserViewModel.swift; sourceTree = "<group>"; };
 		B6ADDC24C59B1BCDBC776DDB /* CodeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeEditorView.swift; sourceTree = "<group>"; };
 		B8AC649B5E133CBB869E7373 /* Grit for GitLab.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Grit for GitLab.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB22CC33DD44EE55FF001122 /* Pipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pipeline.swift; sourceTree = "<group>"; };
 		BB22CC33DD44EE55FF66AA11 /* UserProfileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileSheet.swift; sourceTree = "<group>"; };
 		BFF9E0A6AA973602431F2229 /* StarredReposView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarredReposView.swift; sourceTree = "<group>"; };
-		AA11BB22CC33DD44EE55FF04 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550101 /* WatchingReposView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchingReposView.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550102 /* WatchingReposViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchingReposViewModel.swift; sourceTree = "<group>"; };
 		C04F8F648E67254F8E88CA2A /* RepoInfoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoInfoSheet.swift; sourceTree = "<group>"; };
 		C468B03759AD7BE3E067694E /* ForksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForksView.swift; sourceTree = "<group>"; };
 		C5018B58C270CBAD34CBE9B8 /* Commit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Commit.swift; sourceTree = "<group>"; };
@@ -194,6 +198,7 @@
 				E4088BB6C4C9D3D7A93DB6BA /* RepositoryDetailView.swift */,
 				0DE05624EBCF0AD3AEF75BF4 /* RepositoryListView.swift */,
 				BFF9E0A6AA973602431F2229 /* StarredReposView.swift */,
+				AA11BB22CC33DD44EE550101 /* WatchingReposView.swift */,
 				AA11BB22CC33DD44EE55FF04 /* ActivityView.swift */,
 			);
 			path = Repositories;
@@ -216,6 +221,7 @@
 				1ACCD29C6EA5FC26D052054C /* RepositoryViewModel.swift */,
 				0BA0317B294458AF8BC590F6 /* SearchViewModel.swift */,
 				5AED17E25BC6DA9FBE1774DE /* StarredReposViewModel.swift */,
+				AA11BB22CC33DD44EE550102 /* WatchingReposViewModel.swift */,
 				AA11BB22CC33DD44EE55FF02 /* ActivityViewModel.swift */,
 				DD44EE55FF66AA11BB22CC33 /* UserProfileViewModel.swift */,
 				51D2C3AB090AB4E4C8FF63FA /* InboxViewModel.swift */,
@@ -562,6 +568,8 @@
 				953929EDF46B4813B21C57F2 /* TipJarView.swift in Sources */,
 				E631E2AEAAB849CEA395A429 /* TipStore.swift in Sources */,
 				172A3165384DA5D247B8D524 /* StarredReposView.swift in Sources */,
+				AA11BB22CC33DD44EE551101 /* WatchingReposView.swift in Sources */,
+				AA11BB22CC33DD44EE551102 /* WatchingReposViewModel.swift in Sources */,
 				AA11BB22CC33DD44EE55FF01 /* ActivityEvent.swift in Sources */,
 				AA11BB22CC33DD44EE55FF03 /* ActivityViewModel.swift in Sources */,
 				AA11BB22CC33DD44EE55FF05 /* ActivityView.swift in Sources */,
@@ -646,11 +654,13 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Grit/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Grit;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 0.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stoicswe.grit.app;
 				PRODUCT_NAME = "Grit for GitLab";
 				SDKROOT = iphoneos;
@@ -739,11 +749,13 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Grit/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Grit;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 0.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stoicswe.grit.app;
 				PRODUCT_NAME = "Grit for GitLab";
 				SDKROOT = iphoneos;

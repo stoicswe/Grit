@@ -713,6 +713,48 @@ actor GitLabAPIService {
         )
     }
 
+    // MARK: - Watched Repositories
+
+    /// Fetches the user's member projects (up to `maxPages` pages) and returns
+    /// only those where the user's notification level is explicitly "watch".
+    func fetchWatchedRepositories(
+        baseURL: String,
+        token: String,
+        maxPages: Int = 5
+    ) async throws -> [Repository] {
+        // Collect all member repos across pages first
+        var allRepos: [Repository] = []
+        for page in 1...maxPages {
+            let page = try await request("projects", baseURL: baseURL, token: token, queryItems: [
+                URLQueryItem(name: "membership",    value: "true"),
+                URLQueryItem(name: "order_by",      value: "last_activity_at"),
+                URLQueryItem(name: "sort",          value: "desc"),
+                URLQueryItem(name: "per_page",      value: "50"),
+                URLQueryItem(name: "page",          value: "\(page)"),
+                URLQueryItem(name: "statistics",    value: "true")
+            ]) as [Repository]
+            allRepos.append(contentsOf: page)
+            if page.count < 50 { break }
+        }
+
+        // Concurrently check notification levels and keep only "watch" ones
+        return try await withThrowingTaskGroup(of: Repository?.self) { group in
+            for repo in allRepos {
+                group.addTask {
+                    let level = try? await self.fetchProjectNotificationLevel(
+                        projectID: repo.id, baseURL: baseURL, token: token
+                    )
+                    return level?.level == "watch" ? repo : nil
+                }
+            }
+            var watched: [Repository] = []
+            for try await result in group {
+                if let repo = result { watched.append(repo) }
+            }
+            return watched.sorted { ($0.lastActivityAt ?? .distantPast) > ($1.lastActivityAt ?? .distantPast) }
+        }
+    }
+
     // MARK: - Inbox
 
     /// Fetches open MRs where the given user is the assignee.

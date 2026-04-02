@@ -27,7 +27,6 @@ struct MainTabView: View {
 
     @State private var selectedTab: AppTab = .repositories
     @State private var showAIChat = false
-    @State private var showSearch = false
 
     @ObservedObject private var aiService = AIAssistantService.shared
 
@@ -37,7 +36,7 @@ struct MainTabView: View {
             // ── Native TabView ────────────────────────────────────────
             TabView(selection: $selectedTab) {
                 Tab("Repositories", systemImage: "square.stack.3d.up", value: AppTab.repositories) {
-                    RepositoryListView(showSearch: $showSearch)
+                    RepositoryListView()
                 }
 
                 Tab("Explore", systemImage: "safari", value: AppTab.explore) {
@@ -81,10 +80,6 @@ struct MainTabView: View {
             if !enabled { showAIChat = false }
         }
         .animation(.spring(duration: 0.35, bounce: 0.1), value: showAIChat)
-        .sheet(isPresented: $showSearch) {
-            SearchView()
-                .environmentObject(navState)
-        }
     }
 
     // MARK: - AI Circle Button

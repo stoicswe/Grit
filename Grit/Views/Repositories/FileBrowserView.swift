@@ -9,7 +9,6 @@ struct FileBrowserView: View {
     let displayName: String     // shown in nav title
 
     @StateObject private var viewModel = FileBrowserViewModel()
-    @EnvironmentObject var navState: AppNavigationState
 
     var body: some View {
         Group {
@@ -28,24 +27,6 @@ struct FileBrowserView: View {
         .task { await viewModel.loadDirectory(projectID: projectID, path: path, ref: ref) }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
-        // Register navigation destinations for this branch of the stack
-        .navigationDestination(for: FileNavigation.self) { nav in
-            if nav.file.isDirectory {
-                FileBrowserView(
-                    projectID: nav.projectID,
-                    ref: nav.ref,
-                    path: nav.file.path,
-                    displayName: nav.file.name
-                )
-            } else {
-                FileContentView(
-                    projectID: nav.projectID,
-                    filePath: nav.file.path,
-                    fileName: nav.file.name,
-                    ref: nav.ref
-                )
-            }
-        }
     }
 
     // MARK: - File List

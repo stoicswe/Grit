@@ -63,11 +63,13 @@ private struct UserProfileCard: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: 30, height: 30)
-                        .background(.quaternary, in: Circle())
+                        .background(Color(.tertiarySystemFill), in: Circle())
                 }
                 .padding(.trailing, 20)
             }
             .frame(height: 46)
+
+            Divider().opacity(0.6)
 
             ScrollView {
                 VStack(spacing: 20) {
@@ -97,12 +99,13 @@ private struct UserProfileCard: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.25), radius: 32, y: 12)
+                .fill(.regularMaterial)
+                .shadow(color: .black.opacity(0.22), radius: 40, y: 16)
+                .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(.white.opacity(0.18), lineWidth: 0.5)
+                .strokeBorder(Color(.separator).opacity(0.55), lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
@@ -138,8 +141,36 @@ private struct UserProfileCard: View {
                 }
                 .foregroundStyle(.secondary)
             }
+
+            if !user.socialLinks.isEmpty {
+                socialLinksRow(user.socialLinks)
+            }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func socialLinksRow(_ links: [GitLabUser.SocialLink]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(links) { link in
+                    Link(destination: link.url) {
+                        HStack(spacing: 5) {
+                            Image(systemName: link.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(link.label)
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(.tint)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.accentColor.opacity(0.1),
+                                    in: Capsule())
+                    }
+                }
+            }
+        }
     }
 
     // MARK: Stats
@@ -165,7 +196,7 @@ private struct UserProfileCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(.quaternary.opacity(0.6),
+        .background(Color(.secondarySystemFill),
                     in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
@@ -216,7 +247,7 @@ private struct UserProfileCard: View {
                             AvatarView(urlString: follower.avatarURL,
                                        name: follower.name, size: 40)
                                 .overlay(
-                                    Circle().strokeBorder(.white.opacity(0.15), lineWidth: 1)
+                                    Circle().strokeBorder(Color(.separator).opacity(0.35), lineWidth: 1)
                                 )
                             Text("@\(follower.username)")
                                 .font(.system(size: 9))
@@ -267,7 +298,7 @@ private struct UserProfileCard: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
-                    .background(.quaternary.opacity(0.5),
+                    .background(Color(.secondarySystemFill),
                                 in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
@@ -286,7 +317,7 @@ private struct UserProfileCard: View {
             }
             .foregroundStyle(.tint)
             .padding(12)
-            .background(.quaternary.opacity(0.5),
+            .background(Color(.secondarySystemFill),
                         in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
@@ -295,8 +326,8 @@ private struct UserProfileCard: View {
 
     private var loadingShimmer: some View {
         VStack(spacing: 16) {
-            Circle().fill(.quaternary).frame(width: 72, height: 72)
-                .overlay(Circle().strokeBorder(.white.opacity(0.1), lineWidth: 0.5))
+            Circle().fill(Color(.tertiarySystemFill)).frame(width: 72, height: 72)
+                .overlay(Circle().strokeBorder(Color(.separator).opacity(0.3), lineWidth: 0.5))
             ShimmerView().frame(height: 16).frame(maxWidth: 160)
             ShimmerView().frame(height: 12).frame(maxWidth: 100)
             ShimmerView().frame(height: 50).frame(maxWidth: .infinity)

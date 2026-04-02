@@ -95,7 +95,10 @@ final class ActivityViewModel: ObservableObject {
         let base: [ActivityEvent]
         switch activeFilter {
         case .all:
-            base = feedEvents
+            let merged = feedEvents + starredEvents.filter { starred in
+                !feedEvents.contains { $0.id == starred.id }
+            }
+            base = merged.sorted { $0.createdAt > $1.createdAt }
         case .yourActivity:
             base = yourEvents
         case .yourProjects:

@@ -13,6 +13,9 @@ final class IssueDetailViewModel: ObservableObject {
     @Published var error:                  String?
     /// ID of the authenticated user — used to distinguish "my" bubbles from others'.
     @Published var currentUserID:          Int?
+    /// Whether the current user is allowed to close/reopen this issue.
+    /// True when they are the author, an assignee, or a project member with Reporter (20+) access.
+    @Published var canCloseIssue:          Bool = false
 
     private let api  = GitLabAPIService.shared
     private let auth = AuthenticationService.shared
@@ -45,6 +48,21 @@ final class IssueDetailViewModel: ObservableObject {
             isSubscribed  = detail.subscribed ?? false
             isOpen        = detail.isOpen
             currentUserID = user.id
+
+            // Determine close permission:
+            // Author and assignees can always close their own issues.
+            let isAuthor   = detail.author.id == user.id
+            let isAssignee = detail.assignees.contains { $0.id == user.id }
+            if isAuthor || isAssignee {
+                canCloseIssue = true
+            } else {
+                // Fall back to project membership level (Reporter = 20, Developer = 30, …)
+                let member = try? await api.fetchProjectMemberSelf(
+                    projectID: projectID, userID: user.id,
+                    baseURL: auth.baseURL, token: token
+                )
+                canCloseIssue = (member?.accessLevel ?? 0) >= 20
+            }
         } catch {
             self.error = error.localizedDescription
         }

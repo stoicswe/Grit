@@ -99,7 +99,6 @@ struct RepositoryDetailView: View {
                     path: nav.file.path,
                     displayName: nav.file.name
                 )
-                .environmentObject(navState)
             } else {
                 FileContentView(
                     projectID: nav.projectID,
@@ -107,7 +106,6 @@ struct RepositoryDetailView: View {
                     fileName: nav.file.name,
                     ref: nav.ref
                 )
-                .environmentObject(navState)
             }
         }
         .navigationDestination(for: CommitNavigation.self) { nav in
@@ -322,7 +320,6 @@ struct RepositoryDetailView: View {
                     path: "",
                     displayName: repository.name
                 )
-                .environmentObject(navState)
                 .frame(minHeight: 300)
             } else {
                 ContentUnavailableView("No branch selected", systemImage: "arrow.triangle.branch")
