@@ -65,6 +65,11 @@ final class OAuthService: NSObject {
     private let callbackScheme = "grit"
     private let callbackURL    = "grit://oauth/callback"
 
+    /// UserDefaults key written by AuthenticationService.logout() so the next
+    /// OAuth session starts in ephemeral (private) mode, preventing the previous
+    /// account's Safari cookie from auto-signing in.
+    static let freshSessionKey = "com.grit.oauth.requireFreshSession"
+
     private var activeSession: ASWebAuthenticationSession?
 
     // MARK: - Authorization Code + PKCE
@@ -105,9 +110,15 @@ final class OAuthService: NSObject {
                 continuation.resume(returning: url)
             }
             session.presentationContextProvider = self
-            // Use a shared session so the user's GitLab sign-in cookie is remembered
-            // between subsequent app launches (they won't have to re-enter credentials).
-            session.prefersEphemeralWebBrowserSession = false
+            // Use an ephemeral (private) session if the user explicitly signed out,
+            // so their previous GitLab account cookie cannot auto-sign them back in.
+            // Otherwise use the shared Safari session for a smoother sign-in experience.
+            let needsFresh = UserDefaults.standard.bool(forKey: OAuthService.freshSessionKey)
+            session.prefersEphemeralWebBrowserSession = needsFresh
+            // Clear the flag immediately — it applies to this one session only.
+            if needsFresh {
+                UserDefaults.standard.removeObject(forKey: OAuthService.freshSessionKey)
+            }
             activeSession = session
             session.start()
         }

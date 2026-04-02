@@ -6,7 +6,8 @@ import WebKit
 final class AuthenticationService: ObservableObject {
     static let shared = AuthenticationService()
 
-    @Published var isAuthenticated = false
+    @Published var isAuthenticated    = false
+    @Published var isRestoringSession = true   // true until the first restoreSession() finishes
     @Published var currentUser: GitLabUser?
     @Published var baseURL: String = "https://gitlab.com"
     @Published var isLoading = false
@@ -24,6 +25,8 @@ final class AuthenticationService: ObservableObject {
     // MARK: - Session restoration
 
     func restoreSession() async {
+        defer { isRestoringSession = false }
+
         guard
             let token      = try? keychain.retrieve(for: .accessToken),
             let savedURL   = try? keychain.retrieve(for: .baseURL)
@@ -64,7 +67,7 @@ final class AuthenticationService: ObservableObject {
         do {
             let user = try await GitLabAPIService.shared.fetchCurrentUser(
                 baseURL: savedURL, token: currentToken)
-            currentUser    = user
+            currentUser     = user
             isAuthenticated = true
         } catch {
             isAuthenticated = false
@@ -108,8 +111,11 @@ final class AuthenticationService: ObservableObject {
     func logout() {
         keychain.clearAll()
         UserDefaults.standard.removeObject(forKey: expiryKey)
+        // Signal OAuthService to use an ephemeral browser session on the next
+        // sign-in attempt, so the previous account's Safari cookie is not reused.
+        UserDefaults.standard.set(true, forKey: OAuthService.freshSessionKey)
         clearWebAuthCache()
-        currentUser    = nil
+        currentUser     = nil
         isAuthenticated = false
         baseURL         = "https://gitlab.com"
     }
