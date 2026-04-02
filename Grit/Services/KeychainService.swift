@@ -7,9 +7,12 @@ final class KeychainService: Sendable {
     private init() {}
 
     enum Key: String, CaseIterable {
-        case accessToken = "com.grit.gitlab.accessToken"
-        case baseURL = "com.grit.gitlab.baseURL"
+        case accessToken  = "com.grit.gitlab.accessToken"
+        case baseURL      = "com.grit.gitlab.baseURL"
         case refreshToken = "com.grit.gitlab.refreshToken"
+        /// Client ID of the OAuth application used for the current session.
+        /// Stored so the refresh flow can re-identify the correct app registration.
+        case oauthClientID = "com.grit.gitlab.oauthClientID"
     }
 
     func save(_ value: String, for key: Key) throws {

@@ -46,6 +46,7 @@
 		6317AA6D72D903E9DDB36F1D /* ContributionCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68759726448D00E689FD3E19 /* ContributionCell.swift */; };
 		634B0B3EFB52ED02ED6BEB72 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4592DF4E1391BC8D91879647 /* LoginView.swift */; };
 		63CB91C173C7C57BEBC09BA8 /* GitLabAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46F8A80D10BD8291C59B0941 /* GitLabAPIService.swift */; };
+		AA11BB22CC33DD44EE551201 /* OAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550201 /* OAuthService.swift */; };
 		749AA75ABF944EE396C83795 /* DeveloperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F1C0BA55A34C2FBED5A9BF /* DeveloperView.swift */; };
 		78CA9EB1B9BFE6E4F74EB16A /* IssuesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CEF81EAA1852A927BFCD8D /* IssuesView.swift */; };
 		7A586F2D3BB11113A7033D8F /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888D6FEE270A91ACD3B1398C /* NotificationService.swift */; };
@@ -120,6 +121,7 @@
 		4592DF4E1391BC8D91879647 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		459EDBFBF9B69A21F0CF48E6 /* GritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GritApp.swift; sourceTree = "<group>"; };
 		46F8A80D10BD8291C59B0941 /* GitLabAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitLabAPIService.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550201 /* OAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthService.swift; sourceTree = "<group>"; };
 		49DE1A1A7F88F622FDA02915 /* AIAssistantService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantService.swift; sourceTree = "<group>"; };
 		4C241484075FA6059B05EF36 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		4E5D398F66E84BDF7A417DBD /* ContributionGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributionGraphView.swift; sourceTree = "<group>"; };
@@ -276,6 +278,7 @@
 				4259FB8FD794C4EAED813F10 /* AppNavigationState.swift */,
 				654A118421ACCB09ADD68A09 /* AuthenticationService.swift */,
 				46F8A80D10BD8291C59B0941 /* GitLabAPIService.swift */,
+				AA11BB22CC33DD44EE550201 /* OAuthService.swift */,
 				828C0FA46860191E8D4863D3 /* KeychainService.swift */,
 				888D6FEE270A91ACD3B1398C /* NotificationService.swift */,
 				9A89AC132D8E2943EA1FE0F1 /* SettingsStore.swift */,
@@ -524,6 +527,7 @@
 				4BBEDAA2107EC53C3A84FC34 /* ForksView.swift in Sources */,
 				358B3B543DA3FB1B63E4F499 /* ForksViewModel.swift in Sources */,
 				63CB91C173C7C57BEBC09BA8 /* GitLabAPIService.swift in Sources */,
+				AA11BB22CC33DD44EE551201 /* OAuthService.swift in Sources */,
 				B43BF3F832AFF56E4FB74D8B /* GitLabContributor.swift in Sources */,
 				9BB008A9C29AD265C43F02F3 /* GitLabIssue.swift in Sources */,
 				AC5628097660E7307F163719 /* GitLabNotification.swift in Sources */,
