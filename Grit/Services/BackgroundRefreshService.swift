@@ -52,24 +52,31 @@ final class BackgroundRefreshService {
         guard let token, !baseURL.isEmpty else { return }
 
         do {
-            let all    = try await api.fetchNotifications(baseURL: baseURL, token: token)
-            let unread = all.filter { $0.unread }
-
-            // Deliver local notifications only for IDs we haven't seen before.
-            let seen  = loadSeenIDs()
-            let fresh = unread.filter { !seen.contains($0.id) }
-
-            if !fresh.isEmpty {
-                await deliverLocalNotifications(fresh)
-                saveSeenIDs(seen.union(fresh.map(\.id)))
-            }
-
-            // Keep badge in sync.
-            try? await UNUserNotificationCenter.current().setBadgeCount(unread.count)
-
+            let all = try await api.fetchNotifications(baseURL: baseURL, token: token)
+            await processNewNotifications(all)
         } catch {
             // Background tasks must not crash — silently swallow errors.
         }
+    }
+
+    // MARK: - Shared processing (called by background refresh AND InboxViewModel.load)
+
+    /// Compares `all` against already-seen IDs, fires local banners for anything new,
+    /// updates the seenIDs store, and keeps the badge count in sync.
+    /// Safe to call from any context — foreground or background.
+    func processNewNotifications(_ all: [GitLabNotification]) async {
+        let unread = all.filter { $0.unread }
+
+        let seen  = loadSeenIDs()
+        let fresh = unread.filter { !seen.contains($0.id) }
+
+        if !fresh.isEmpty {
+            await deliverLocalNotifications(fresh)
+            saveSeenIDs(seen.union(fresh.map(\.id)))
+        }
+
+        // Keep badge in sync.
+        try? await UNUserNotificationCenter.current().setBadgeCount(unread.count)
     }
 
     // MARK: - Seen ID persistence
@@ -96,8 +103,10 @@ final class BackgroundRefreshService {
         if notifications.count > 3 {
             // Batch multiple items into a single summary to avoid flooding the lock screen.
             let content      = UNMutableNotificationContent()
-            content.title    = "Grit"
-            content.body     = "\(notifications.count) new GitLab notifications"
+            content.title    = "Grit · \(notifications.count) New Notifications"
+            content.body     = notifications.compactMap { Self.actionSummary(for: $0) }
+                                            .prefix(3)
+                                            .joined(separator: "\n")
             content.sound    = .default
             try? await center.add(
                 UNNotificationRequest(identifier: UUID().uuidString,
@@ -105,13 +114,19 @@ final class BackgroundRefreshService {
             )
         } else {
             for notification in notifications {
-                let content   = UNMutableNotificationContent()
-                content.title = Self.title(for: notification)
-                if let project = notification.project {
-                    content.subtitle = project.nameWithNamespace
-                }
-                content.body  = notification.body
-                content.sound = .default
+                let content      = UNMutableNotificationContent()
+                content.title    = Self.title(for: notification)
+                content.subtitle = notification.project?.nameWithNamespace ?? ""
+                content.body     = notification.body.isEmpty
+                                   ? Self.actionSummary(for: notification) ?? ""
+                                   : notification.body
+                content.sound    = .default
+                content.userInfo = [
+                    "grit.notificationId": notification.id,
+                    "grit.targetType":     notification.targetType ?? "",
+                    "grit.targetURL":      notification.targetURL  ?? "",
+                    "grit.projectId":      notification.project?.id ?? 0
+                ]
                 try? await center.add(
                     UNNotificationRequest(identifier: "grit-notif-\(notification.id)",
                                           content: content, trigger: nil)
@@ -120,9 +135,22 @@ final class BackgroundRefreshService {
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Content helpers
 
+    /// "{Type} · {Action}" — e.g. "Issue · Assigned to You" or "Merge Request · Review Requested"
     private static func title(for notification: GitLabNotification) -> String {
+        let type   = typeName(for: notification)
+        let action = actionName(for: notification)
+        return "\(type) · \(action)"
+    }
+
+    /// Short one-line summary used for batch-notification bodies and empty-body fallbacks.
+    private static func actionSummary(for notification: GitLabNotification) -> String? {
+        guard let project = notification.project else { return actionName(for: notification) }
+        return "\(actionName(for: notification)) — \(project.name)"
+    }
+
+    private static func typeName(for notification: GitLabNotification) -> String {
         switch notification.targetType?.lowercased() {
         case "mergerequest": return "Merge Request"
         case "issue":        return "Issue"
@@ -130,6 +158,28 @@ final class BackgroundRefreshService {
         case "pipeline":     return "Pipeline"
         case "note":         return "Comment"
         default:             return "GitLab"
+        }
+    }
+
+    private static func actionName(for notification: GitLabNotification) -> String {
+        switch notification.actionName?.lowercased() {
+        case "assigned":              return "Assigned to You"
+        case "mentioned":             return "You Were Mentioned"
+        case "directly_addressed":    return "You Were Directly Addressed"
+        case "review_requested":      return "Review Requested"
+        case "approval_required":     return "Approval Required"
+        case "approved":              return "Approved"
+        case "unapproved":            return "Approval Removed"
+        case "merge_train_removed":   return "Removed from Merge Train"
+        case "unmergeable":           return "Cannot Be Merged"
+        case "build_failed":          return "Pipeline Failed"
+        case "marked":                return "Marked"
+        case "all_todos":             return "All Todos"
+        default:
+            // Fall back to a capitalised version of the raw action name if unrecognised.
+            return notification.actionName?
+                .replacingOccurrences(of: "_", with: " ")
+                .capitalized ?? "New Notification"
         }
     }
 }

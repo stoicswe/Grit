@@ -222,10 +222,17 @@ struct IssueDetailView: View {
 
     @ViewBuilder
     private var labelsCard: some View {
-        if !issue.labels.isEmpty {
-            GlassCard {
-                VStack(alignment: .leading, spacing: 10) {
-                    GlassSectionHeader(title: "Labels", trailing: "\(issue.labels.count)")
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                GlassSectionHeader(
+                    title: "Labels",
+                    trailing: issue.labels.isEmpty ? nil : "\(issue.labels.count)"
+                )
+                if issue.labels.isEmpty {
+                    Label("No labels", systemImage: "tag.slash")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                } else {
                     FlowLayout(spacing: 6) {
                         ForEach(issue.labels, id: \.self) { label in
                             Text(label)
@@ -238,8 +245,8 @@ struct IssueDetailView: View {
                     }
                 }
             }
-            .padding(.horizontal)
         }
+        .padding(.horizontal)
     }
 
     // MARK: - Assignees

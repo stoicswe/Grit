@@ -28,6 +28,7 @@ struct MainTabView: View {
     @State private var selectedTab: AppTab = .repositories
     @State private var showAIChat = false
 
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var aiService = AIAssistantService.shared
 
     var body: some View {
@@ -74,6 +75,32 @@ struct MainTabView: View {
                     .padding(.bottom, 80)   // clears the native tab bar + home indicator
                     .zIndex(20)
             }
+        }
+        // Initial inbox load + start polling as soon as the tab view is alive.
+        .task {
+            await inboxVM.load()
+            inboxVM.startPolling()
+        }
+        // Pause polling when the app leaves the foreground; resume when it returns.
+        // On resume, silently try to refresh an OAuth token that may have expired
+        // while the phone was locked — this prevents 401 errors on the first poll.
+        // The BGAppRefreshTask covers background checks independently.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task {
+                    await AuthenticationService.shared.refreshOAuthTokenIfNeeded()
+                    inboxVM.startPolling()
+                }
+            } else if phase == .inactive || phase == .background {
+                inboxVM.stopPolling()
+            }
+        }
+        // Deep-link: switch to Inbox and navigate to the tapped notification.
+        .onChange(of: notificationService.pendingDeepLinkNotificationID) { _, notifID in
+            guard let id = notifID else { return }
+            selectedTab = .inbox
+            inboxVM.navigateToNotification(id: id)
+            notificationService.pendingDeepLinkNotificationID = nil
         }
         // Close the panel if the user disables AI while it's open
         .onChange(of: aiService.isUserEnabled) { _, enabled in

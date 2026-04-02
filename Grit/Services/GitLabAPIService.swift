@@ -60,6 +60,27 @@ actor GitLabAPIService {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
+
+        // On 401, attempt a silent OAuth token refresh and retry the request once.
+        // This covers the case where the app was backgrounded long enough for the
+        // 2-hour GitLab OAuth token to expire without the proactive foreground-resume
+        // refresh having had a chance to run.
+        if httpResponse.statusCode == 401 {
+            if let newToken = await AuthenticationService.shared.refreshTokenUnconditionally() {
+                var retryReq = req
+                retryReq.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                let (retryData, retryResponse) = try await session.data(for: retryReq)
+                guard let retryHTTP = retryResponse as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                guard (200...299).contains(retryHTTP.statusCode) else {
+                    throw APIError.httpError(retryHTTP.statusCode)
+                }
+                return try decoder.decode(T.self, from: retryData)
+            }
+            throw APIError.httpError(401)
+        }
+
         guard (200...299).contains(httpResponse.statusCode) else {
             throw APIError.httpError(httpResponse.statusCode)
         }
@@ -85,8 +106,25 @@ actor GitLabAPIService {
         req.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await session.data(for: req)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+
+        if httpResponse.statusCode == 401 {
+            if let newToken = await AuthenticationService.shared.refreshTokenUnconditionally() {
+                var retryReq = req
+                retryReq.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                let (retryData, retryResponse) = try await session.data(for: retryReq)
+                guard let retryHTTP = retryResponse as? HTTPURLResponse,
+                      (200...299).contains(retryHTTP.statusCode) else {
+                    throw APIError.invalidResponse
+                }
+                return try decoder.decode(T.self, from: retryData)
+            }
+            throw APIError.httpError(401)
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
             throw APIError.invalidResponse
         }
         return try decoder.decode(T.self, from: data)
@@ -106,10 +144,28 @@ actor GitLabAPIService {
         req.httpMethod = method
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (_, response) = try await session.data(for: req)
+        var (_, response) = try await session.data(for: req)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
+
+        if httpResponse.statusCode == 401 {
+            if let newToken = await AuthenticationService.shared.refreshTokenUnconditionally() {
+                var retryReq = req
+                retryReq.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                (_, response) = try await session.data(for: retryReq)
+                guard let retryHTTP = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                let retryCode = retryHTTP.statusCode
+                guard (200...299).contains(retryCode) || extraSuccessCodes.contains(retryCode) else {
+                    throw APIError.httpError(retryCode)
+                }
+                return
+            }
+            throw APIError.httpError(401)
+        }
+
         let code = httpResponse.statusCode
         guard (200...299).contains(code) || extraSuccessCodes.contains(code) else {
             throw APIError.httpError(code)

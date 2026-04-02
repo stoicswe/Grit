@@ -109,9 +109,10 @@ struct GitLabIssue: Codable, Identifiable, Hashable {
         closedAt       = try c.decodeIfPresent(Date.self,   forKey: .closedAt)
         // GitLab may return null for labels/assignees on some instances; fall back to [].
         labels         = (try? c.decode([String].self,      forKey: .labels))     ?? []
-        author         = try c.decode(IssueAuthor.self,     forKey: .author)
+        author         = (try? c.decode(IssueAuthor.self,     forKey: .author))
+                         ?? IssueAuthor(id: 0, name: "Unknown", username: "unknown", avatarURL: nil)
         assignees      = (try? c.decode([IssueAuthor].self, forKey: .assignees))  ?? []
-        webURL         = try c.decode(String.self,          forKey: .webURL)
+        webURL         = (try? c.decode(String.self,        forKey: .webURL))     ?? ""
         userNotesCount = (try? c.decode(Int.self,           forKey: .userNotesCount)) ?? 0
         upvotes        = (try? c.decode(Int.self,           forKey: .upvotes))    ?? 0
         downvotes      = (try? c.decode(Int.self,           forKey: .downvotes))  ?? 0
@@ -137,5 +138,19 @@ struct GitLabIssueNote: Codable, Identifiable {
         case id, body, author, system
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+
+    // Custom decoder so that nullable/missing fields (e.g. body on system events,
+    // author on bot-generated notes, updated_at on very old notes) never crash
+    // the entire notes array decode.
+    init(from decoder: Decoder) throws {
+        let c  = try decoder.container(keyedBy: CodingKeys.self)
+        id        = try c.decode(Int.self, forKey: .id)
+        body      = (try? c.decodeIfPresent(String.self, forKey: .body)) ?? ""
+        author    = (try? c.decode(GitLabIssue.IssueAuthor.self, forKey: .author))
+                    ?? GitLabIssue.IssueAuthor(id: 0, name: "GitLab", username: "gitlab", avatarURL: nil)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = (try? c.decode(Date.self, forKey: .updatedAt)) ?? createdAt
+        system    = (try? c.decode(Bool.self, forKey: .system)) ?? false
     }
 }
