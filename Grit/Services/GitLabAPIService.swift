@@ -197,9 +197,24 @@ actor GitLabAPIService {
     }
 
     func fetchRepository(projectID: Int, baseURL: String, token: String) async throws -> Repository {
-        return try await request("projects/\(projectID)", baseURL: baseURL, token: token, queryItems: [
-            URLQueryItem(name: "statistics", value: "true")
-        ])
+        // Attempt up to 3 times. On a 403 we retry without the statistics param —
+        // some projects/groups restrict statistics to members even when the repo is public.
+        // Any non-403 error is surfaced immediately without retrying.
+        var lastError: Error = APIError.invalidResponse
+        for attempt in 1...3 {
+            let withStats = attempt == 1   // only request statistics on the first try
+            let queryItems = withStats ? [URLQueryItem(name: "statistics", value: "true")] : []
+            do {
+                return try await request("projects/\(projectID)", baseURL: baseURL, token: token,
+                                         queryItems: queryItems)
+            } catch APIError.httpError(403) {
+                lastError = APIError.httpError(403)
+                // fall through and retry without statistics
+            } catch {
+                throw error
+            }
+        }
+        throw lastError
     }
 
     // MARK: - Branches
@@ -231,18 +246,30 @@ actor GitLabAPIService {
         token: String,
         page: Int = 1
     ) async throws -> [Commit] {
-        var items = [
-            URLQueryItem(name: "per_page", value: "20"),
-            URLQueryItem(name: "page", value: "\(page)"),
-            URLQueryItem(name: "with_stats", value: "true")
-        ]
-        if let branch { items.append(URLQueryItem(name: "ref_name", value: branch)) }
-        return try await request(
-            "projects/\(projectID)/repository/commits",
-            baseURL: baseURL,
-            token: token,
-            queryItems: items
-        )
+        // Attempt up to 3 times. On a 403 retry without with_stats —
+        // some projects restrict per-commit stats to members.
+        var lastError: Error = APIError.invalidResponse
+        for attempt in 1...3 {
+            var items = [
+                URLQueryItem(name: "per_page", value: "20"),
+                URLQueryItem(name: "page",     value: "\(page)"),
+            ]
+            if attempt == 1 { items.append(URLQueryItem(name: "with_stats", value: "true")) }
+            if let branch   { items.append(URLQueryItem(name: "ref_name",   value: branch)) }
+            do {
+                return try await request(
+                    "projects/\(projectID)/repository/commits",
+                    baseURL: baseURL,
+                    token: token,
+                    queryItems: items
+                )
+            } catch APIError.httpError(403) {
+                lastError = APIError.httpError(403)
+            } catch {
+                throw error
+            }
+        }
+        throw lastError
     }
 
     func fetchCommitDiff(projectID: Int, sha: String, baseURL: String, token: String) async throws -> [CommitDiff] {

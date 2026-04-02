@@ -152,24 +152,36 @@ final class RepositoryDetailViewModel: ObservableObject {
         error = nil
         defer { isLoading = false }
 
+        // Kick off all three requests concurrently.
+        async let repoTask     = api.fetchRepository(projectID: projectID, baseURL: auth.baseURL, token: token)
+        async let branchesTask = api.fetchBranches(projectID: projectID, baseURL: auth.baseURL, token: token)
+        async let mrsTask      = api.fetchMergeRequests(projectID: projectID, baseURL: auth.baseURL, token: token)
+
+        // Repository metadata is mandatory — bail out on failure but still
+        // consume the sibling tasks so their child tasks are not leaked.
         do {
-            async let repoTask     = api.fetchRepository(projectID: projectID, baseURL: auth.baseURL, token: token)
-            async let branchesTask = api.fetchBranches(projectID: projectID, baseURL: auth.baseURL, token: token)
-            async let mrsTask      = api.fetchMergeRequests(projectID: projectID, baseURL: auth.baseURL, token: token)
-
-            let (repo, fetchedBranches, mrs) = try await (repoTask, branchesTask, mrsTask)
-            repository     = repo
-            branches       = fetchedBranches
-            mergeRequests  = mrs
-            selectedBranch = repo.defaultBranch ?? fetchedBranches.first(where: { $0.isDefault })?.name
-
-            if let branch = selectedBranch {
-                commits = try await api.fetchCommits(
-                    projectID: projectID, branch: branch, baseURL: auth.baseURL, token: token
-                )
-            }
+            repository = try await repoTask
         } catch {
             self.error = error.localizedDescription
+            _ = try? await branchesTask
+            _ = try? await mrsTask
+            return
+        }
+
+        // Branches and MRs are independent: a 403 on one (e.g. MRs disabled,
+        // or repository access restricted to members) only empties that tab
+        // and does not block the rest of the view from loading.
+        branches      = (try? await branchesTask) ?? []
+        mergeRequests = (try? await mrsTask)      ?? []
+        selectedBranch = repository?.defaultBranch
+            ?? branches.first(where: { $0.isDefault })?.name
+
+        if let branch = selectedBranch {
+            // fetchCommits already retries without with_stats on 403; an
+            // unrecoverable failure here just leaves the commits tab empty.
+            commits = (try? await api.fetchCommits(
+                projectID: projectID, branch: branch, baseURL: auth.baseURL, token: token
+            )) ?? []
         }
 
         // Fetch watch level independently — a failure here shouldn't break the rest of the view.

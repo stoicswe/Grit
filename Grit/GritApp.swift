@@ -13,7 +13,9 @@ struct GritApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if authService.isAuthenticated {
+                if authService.isRestoringSession {
+                    SplashView()
+                } else if authService.isAuthenticated {
                     MainTabView()
                 } else {
                     LoginView()
