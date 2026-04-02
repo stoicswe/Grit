@@ -145,6 +145,30 @@ final class AuthenticationService: ObservableObject {
         }
     }
 
+    /// Unconditionally attempts an OAuth refresh — used by the API layer after receiving a
+    /// 401, where the client-side expiry clock may be wrong (e.g. server-side revocation)
+    /// or the token expired between the last proactive check and the network call.
+    /// Returns the new access token string on success, or `nil` if refresh is not possible
+    /// (PAT user, no refresh token stored) or if the refresh request itself fails.
+    func refreshTokenUnconditionally() async -> String? {
+        guard
+            let refreshToken = try? keychain.retrieve(for: .refreshToken),
+            let clientID     = try? keychain.retrieve(for: .oauthClientID)
+        else { return nil }   // PAT user — nothing to refresh
+
+        do {
+            let newTokens = try await OAuthService.shared.refresh(
+                refreshToken: refreshToken,
+                baseURL: baseURL,
+                clientID: clientID
+            )
+            try storeOAuthTokens(newTokens, baseURL: baseURL, clientID: clientID)
+            return newTokens.accessToken
+        } catch {
+            return nil
+        }
+    }
+
     // MARK: - Accessors
 
     var accessToken: String? {

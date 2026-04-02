@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- The app does not participate in cross-app or cross-site tracking. -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+
+    <!-- No domains are used for tracking. -->
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <!-- The app displays data from the user's own GitLab instance but does
+         not collect, transmit, or share any personal data itself. -->
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <!-- Required-reason APIs used by the app. -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <!-- UserDefaults is used to persist app preferences (appearance,
+                 accent colour, notification settings), OAuth token expiry
+                 timestamps, the post-logout ephemeral-session flag, and
+                 lightweight API-response caches. All data is written and
+                 read exclusively by this app. -->
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <!-- CA92.1: The app accesses UserDefaults to read and write
+                     data that it previously stored there itself. -->
+                <string>CA92.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

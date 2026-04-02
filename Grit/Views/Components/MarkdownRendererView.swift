@@ -12,8 +12,13 @@ import SwiftUI
 /// blockquotes, unordered lists, ordered lists, horizontal rules, paragraphs.
 /// Supported inline elements (via AttributedString): bold, italic, inline code,
 /// strikethrough, and links.
+///
+/// - Parameter highContrast: When `true`, all body text uses `.primary` instead of
+///   `.secondary` so it remains fully legible on a solid coloured bubble background
+///   (e.g. the current-user chat bubble). Defaults to `false`.
 struct MarkdownRendererView: View {
     let source: String
+    var highContrast: Bool = false
 
     @State private var rendered: [MDRenderedBlock] = []
     @State private var isReady  = false
@@ -23,7 +28,7 @@ struct MarkdownRendererView: View {
             if isReady {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(Array(rendered.enumerated()), id: \.offset) { _, block in
-                        MDRenderedBlockView(block: block)
+                        MDRenderedBlockView(block: block, highContrast: highContrast)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -32,7 +37,7 @@ struct MarkdownRendererView: View {
                 // Instant zero-cost placeholder — replaced once background parsing finishes
                 Text(source)
                     .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(highContrast ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(.opacity)
             }
@@ -249,15 +254,17 @@ private enum MDParser {
 // MARK: - Block view dispatcher (consumes pre-computed AttributedStrings — zero parsing)
 
 private struct MDRenderedBlockView: View {
-    let block: MDRenderedBlock
+    let block:        MDRenderedBlock
+    let highContrast: Bool
+
     var body: some View {
         switch block {
         case .heading(let lvl, let txt):       MDHeadingView(level: lvl, text: txt)
-        case .paragraph(let txt):              MDParagraphView(text: txt)
-        case .codeBlock(let lang, let lines):  MDCodeBlockView(language: lang, lines: lines)
-        case .blockquote(let lines):           MDBlockquoteView(lines: lines)
-        case .unorderedList(let items):        MDUnorderedListView(items: items)
-        case .orderedList(let items):          MDOrderedListView(items: items)
+        case .paragraph(let txt):              MDParagraphView(text: txt, highContrast: highContrast)
+        case .codeBlock(let lang, let lines):  MDCodeBlockView(language: lang, lines: lines, highContrast: highContrast)
+        case .blockquote(let lines):           MDBlockquoteView(lines: lines, highContrast: highContrast)
+        case .unorderedList(let items):        MDUnorderedListView(items: items, highContrast: highContrast)
+        case .orderedList(let items):          MDOrderedListView(items: items, highContrast: highContrast)
         case .rule:                            MDRuleView()
         }
     }
@@ -303,11 +310,13 @@ private struct MDHeadingView: View {
 // MARK: - Paragraph
 
 private struct MDParagraphView: View {
-    let text: AttributedString
+    let text:         AttributedString
+    let highContrast: Bool
+
     var body: some View {
         Text(text)
             .font(.system(size: 14))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(highContrast ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
     }
@@ -316,8 +325,9 @@ private struct MDParagraphView: View {
 // MARK: - Code Block
 
 private struct MDCodeBlockView: View {
-    let language: String?
-    let lines:    [String]
+    let language:     String?
+    let lines:        [String]
+    let highContrast: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -326,18 +336,18 @@ private struct MDCodeBlockView: View {
             if let lang = language {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(Color.accentColor.opacity(0.65))
+                        .fill(Color.accentColor.opacity(highContrast ? 0.9 : 0.65))
                         .frame(width: 6, height: 6)
                     Text(lang)
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(highContrast ? AnyShapeStyle(.primary.opacity(0.8)) : AnyShapeStyle(.secondary))
                     Spacer()
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color.primary.opacity(0.07))
+                .background(Color.primary.opacity(highContrast ? 0.14 : 0.07))
 
-                Divider().opacity(0.5)
+                Divider().opacity(highContrast ? 0.3 : 0.5)
             }
 
             // Horizontally scrollable code lines
@@ -346,7 +356,7 @@ private struct MDCodeBlockView: View {
                     ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                         Text(line.isEmpty ? " " : line)
                             .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(.primary.opacity(0.82))
+                            .foregroundStyle(highContrast ? AnyShapeStyle(.primary) : AnyShapeStyle(.primary.opacity(0.82)))
                             .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 2)
@@ -355,11 +365,11 @@ private struct MDCodeBlockView: View {
                 .padding(.vertical, 8)
             }
         }
-        .background(Color.primary.opacity(0.045))
+        .background(Color.primary.opacity(highContrast ? 0.12 : 0.045))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                .strokeBorder(Color.primary.opacity(highContrast ? 0.22 : 0.1), lineWidth: 0.5)
         )
     }
 }
@@ -367,13 +377,14 @@ private struct MDCodeBlockView: View {
 // MARK: - Blockquote
 
 private struct MDBlockquoteView: View {
-    let lines: [AttributedString]
+    let lines:        [AttributedString]
+    let highContrast: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             // Accent left border
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color.accentColor.opacity(0.7))
+                .fill(Color.accentColor.opacity(highContrast ? 1.0 : 0.7))
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -383,7 +394,7 @@ private struct MDBlockquoteView: View {
                     } else {
                         Text(line)
                             .font(.system(size: 14).italic())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(highContrast ? AnyShapeStyle(.primary.opacity(0.85)) : AnyShapeStyle(.secondary))
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
@@ -394,7 +405,7 @@ private struct MDBlockquoteView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
-            Color.accentColor.opacity(0.07),
+            Color.primary.opacity(highContrast ? 0.12 : 0.07),
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
     }
@@ -403,7 +414,8 @@ private struct MDBlockquoteView: View {
 // MARK: - Unordered List
 
 private struct MDUnorderedListView: View {
-    let items: [AttributedString]
+    let items:        [AttributedString]
+    let highContrast: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -415,7 +427,7 @@ private struct MDUnorderedListView: View {
                         .padding(.top, 6)
                     Text(item)
                         .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(highContrast ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                 }
@@ -427,7 +439,8 @@ private struct MDUnorderedListView: View {
 // MARK: - Ordered List
 
 private struct MDOrderedListView: View {
-    let items: [AttributedString]
+    let items:        [AttributedString]
+    let highContrast: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -435,11 +448,13 @@ private struct MDOrderedListView: View {
                 HStack(alignment: .top, spacing: 10) {
                     Text("\(idx + 1).")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Color.accentColor.opacity(0.8))
+                        .foregroundStyle(highContrast
+                            ? AnyShapeStyle(.primary.opacity(0.9))
+                            : AnyShapeStyle(Color.accentColor.opacity(0.8)))
                         .frame(minWidth: 22, alignment: .trailing)
                     Text(item)
                         .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(highContrast ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
                 }

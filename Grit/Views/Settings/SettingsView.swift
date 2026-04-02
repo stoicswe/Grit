@@ -107,6 +107,20 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 200)
             }
+
+            Toggle(isOn: $settingsStore.hideTabBarLabels) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Hide Tab Bar Labels")
+                            .font(.system(size: 15))
+                        Text("Show icons only in the navigation bar")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "dock.rectangle")
+                }
+            }
         } header: {
             Text("Appearance")
         } footer: {

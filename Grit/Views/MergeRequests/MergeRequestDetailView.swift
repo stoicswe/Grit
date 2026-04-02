@@ -700,9 +700,11 @@ private struct MRChatBubble: View {
             }
 
             // Bubble
+            // Own messages: force dark-mode semantic colours so all heading /
+            // paragraph / list text stays legible against the tinted glass surface.
             Group {
                 if isCurrentUser {
-                    MarkdownRendererView(source: note.body)
+                    MarkdownRendererView(source: note.body, highContrast: true)
                         .environment(\.colorScheme, .dark)
                 } else {
                     MarkdownRendererView(
@@ -717,9 +719,21 @@ private struct MRChatBubble: View {
             .clipShape(bubbleShape)
             .overlay(
                 bubbleShape.strokeBorder(
-                    isCurrentUser ? Color.clear : Color.white.opacity(0.14),
-                    lineWidth: 0.5
+                    LinearGradient(
+                        colors: isCurrentUser
+                            ? [.white.opacity(0.50), .white.opacity(0.12)]
+                            : [.white.opacity(0.65), .white.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.75
                 )
+            )
+            .shadow(
+                color: isCurrentUser
+                    ? Color.accentColor.opacity(0.28)
+                    : Color.black.opacity(0.10),
+                radius: 8, y: 3
             )
 
             // Translate button (independent of AI toggle)
@@ -787,9 +801,30 @@ private struct MRChatBubble: View {
     @ViewBuilder
     private var bubbleBackground: some View {
         if isCurrentUser {
-            Color.accentColor
+            // Solid accent base guarantees full contrast for white text regardless of
+            // what is scrolling behind the bubble. The glass look comes from the white
+            // shimmer layer, specular gradient, and gradient stroke — not transparency.
+            ZStack {
+                bubbleShape.fill(Color.accentColor)
+                bubbleShape.fill(Color.white.opacity(0.10))
+                LinearGradient(
+                    colors: [.white.opacity(0.30), .clear],
+                    startPoint: .top,
+                    endPoint: UnitPoint(x: 0.5, y: 0.52)
+                )
+                .clipShape(bubbleShape)
+            }
         } else {
-            Color.clear.background(.ultraThinMaterial)
+            // Liquid glass: denser material for true frosted opacity + specular top-highlight
+            ZStack {
+                bubbleShape.fill(.regularMaterial)
+                LinearGradient(
+                    colors: [.white.opacity(0.20), .clear],
+                    startPoint: .top,
+                    endPoint: UnitPoint(x: 0.5, y: 0.52)
+                )
+                .clipShape(bubbleShape)
+            }
         }
     }
 }

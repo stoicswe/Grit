@@ -81,18 +81,32 @@ struct ContributionStats {
 
         let total = days.reduce(0) { $0 + $1.count }
 
-        // Calculate streaks
+        // Calculate streaks (iterating most-recent → oldest).
+        //
+        // currentStreak: consecutive active days ending at the most recent
+        //   active day. We skip today if it has no contributions yet so that
+        //   a streak earned yesterday isn't broken just because the day hasn't
+        //   finished. Once the first zero *after* today is encountered the
+        //   current streak is locked and we stop updating it.
+        //
+        // longestStreak: the longest consecutive run anywhere in the year.
         var currentStreak = 0
         var longestStreak = 0
         var tempStreak = 0
+        var currentStreakFinalized = false
 
-        for day in days.reversed() {
+        for (index, day) in days.reversed().enumerated() {
             if day.count > 0 {
                 tempStreak += 1
-                if currentStreak == 0 { currentStreak = tempStreak }
+                if !currentStreakFinalized { currentStreak = tempStreak }
                 longestStreak = max(longestStreak, tempStreak)
             } else {
-                if currentStreak == 0 { currentStreak = 0 }
+                if index == 0 {
+                    // Today has no contributions yet — don't break the streak,
+                    // just skip this day and keep counting from yesterday.
+                    continue
+                }
+                currentStreakFinalized = true
                 tempStreak = 0
             }
         }

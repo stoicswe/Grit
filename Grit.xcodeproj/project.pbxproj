@@ -16,8 +16,6 @@
 		0C5323777160A0D18FE5D287 /* GitLabUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 399E41FACC8053BE0C35394A /* GitLabUser.swift */; };
 		160880D51970E7B5EB22E28A /* ContributionData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40A12A4C372DD9CF74B08696 /* ContributionData.swift */; };
 		172A3165384DA5D247B8D524 /* StarredReposView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF9E0A6AA973602431F2229 /* StarredReposView.swift */; };
-		AA11BB22CC33DD44EE551101 /* WatchingReposView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550101 /* WatchingReposView.swift */; };
-		AA11BB22CC33DD44EE551102 /* WatchingReposViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550102 /* WatchingReposViewModel.swift */; };
 		1C07A75013D83244A69396FB /* MergeRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2ECFFE13A7EEF6AFAE3FE43 /* MergeRequest.swift */; };
 		25342B40F527DD36EBFF6A5C /* CommitListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EE8006AF01DFF08478ABC96 /* CommitListView.swift */; };
 		26FB721EB812D54F1DEEB67B /* MergeRequestListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA766C393F5375349C783AA /* MergeRequestListView.swift */; };
@@ -45,9 +43,7 @@
 		5A00C497A1C195790BDFFC81 /* BranchListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BBBB218A810990E9856B5E8 /* BranchListView.swift */; };
 		6317AA6D72D903E9DDB36F1D /* ContributionCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68759726448D00E689FD3E19 /* ContributionCell.swift */; };
 		634B0B3EFB52ED02ED6BEB72 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4592DF4E1391BC8D91879647 /* LoginView.swift */; };
-		AA11BB22CC33DD44EE551301 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550301 /* SplashView.swift */; };
 		63CB91C173C7C57BEBC09BA8 /* GitLabAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46F8A80D10BD8291C59B0941 /* GitLabAPIService.swift */; };
-		AA11BB22CC33DD44EE551201 /* OAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550201 /* OAuthService.swift */; };
 		749AA75ABF944EE396C83795 /* DeveloperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F1C0BA55A34C2FBED5A9BF /* DeveloperView.swift */; };
 		78CA9EB1B9BFE6E4F74EB16A /* IssuesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0CEF81EAA1852A927BFCD8D /* IssuesView.swift */; };
 		7A586F2D3BB11113A7033D8F /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888D6FEE270A91ACD3B1398C /* NotificationService.swift */; };
@@ -55,6 +51,7 @@
 		85ACCA72E818900DB8188FEC /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728AE14F96F8518089EF4AB2 /* ExploreView.swift */; };
 		8786D047E41539BCD96F1354 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05A193BCB0B1256BC5706AD9 /* ProfileViewModel.swift */; };
 		89BDD99B45A49328A1FE06E0 /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3331A50E7CE25312F63C853 /* InboxView.swift */; };
+		AA11BB22CC33DD44EE551501 /* NotificationTargetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550501 /* NotificationTargetView.swift */; };
 		8DADA5F5EED2B153189D2F56 /* AIAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F86BDA302F7AFA52B4EA5B9 /* AIAssistantView.swift */; };
 		9141A87E94A8D417498B1669 /* RepositoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ACCD29C6EA5FC26D052054C /* RepositoryViewModel.swift */; };
 		94C7385809D230C6062325E4 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A89AC132D8E2943EA1FE0F1 /* SettingsStore.swift */; };
@@ -64,6 +61,10 @@
 		9BB008A9C29AD265C43F02F3 /* GitLabIssue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C302B48DFAE3703CE4ED8C1 /* GitLabIssue.swift */; };
 		9BE737834EC20612D6B24A98 /* AppleIntelligenceInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD11D744187E96CB58B3482A /* AppleIntelligenceInfoView.swift */; };
 		A9D884A76E46461CA6E72388 /* ReportIssueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F97E7EE9746448CEB57512D2 /* ReportIssueView.swift */; };
+		AA11BB22CC33DD44EE551101 /* WatchingReposView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550101 /* WatchingReposView.swift */; };
+		AA11BB22CC33DD44EE551102 /* WatchingReposViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550102 /* WatchingReposViewModel.swift */; };
+		AA11BB22CC33DD44EE551201 /* OAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550201 /* OAuthService.swift */; };
+		AA11BB22CC33DD44EE551301 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550301 /* SplashView.swift */; };
 		AA11BB22CC33DD44EE55FF01 /* ActivityEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF00 /* ActivityEvent.swift */; };
 		AA11BB22CC33DD44EE55FF03 /* ActivityViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF02 /* ActivityViewModel.swift */; };
 		AA11BB22CC33DD44EE55FF05 /* ActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE55FF04 /* ActivityView.swift */; };
@@ -90,6 +91,7 @@
 		ED52058906626E19AA00E902 /* BackgroundRefreshService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 661F5FD76DE9BFF9F4E63DEC /* BackgroundRefreshService.swift */; };
 		F9C754E021FFE5C3E8F7A705 /* CommitDiffViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 235F3DA70927577C59CB64CF /* CommitDiffViewModel.swift */; };
 		FBEA48CD84498AFD2B1E7845 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 893EE940F49561E84C6A42C4 /* Assets.xcassets */; };
+		AA11BB22CC33DD44EE551401 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550401 /* PrivacyInfo.xcprivacy */; };
 		FCDFC0AE0BEA17BEAECF71A4 /* NotificationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E343DC68D7F7FBFE8F71AF5 /* NotificationViewModel.swift */; };
 /* End PBXBuildFile section */
 
@@ -98,6 +100,7 @@
 		0697C4A352DE38AC74EA091E /* IssueDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueDetailViewModel.swift; sourceTree = "<group>"; };
 		06EEA218B6339F6A582BACB8 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		089F9B47AB39176F2C114239 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550401 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xcprivacy; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0B2440FF232278F8DF4DBB98 /* SyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighter.swift; sourceTree = "<group>"; };
 		0BA0317B294458AF8BC590F6 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
 		0C286EEBA3BD647B0E887987 /* CommitDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitDetailView.swift; sourceTree = "<group>"; };
@@ -120,10 +123,8 @@
 		40A12A4C372DD9CF74B08696 /* ContributionData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributionData.swift; sourceTree = "<group>"; };
 		4259FB8FD794C4EAED813F10 /* AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationState.swift; sourceTree = "<group>"; };
 		4592DF4E1391BC8D91879647 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
-		AA11BB22CC33DD44EE550301 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		459EDBFBF9B69A21F0CF48E6 /* GritApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GritApp.swift; sourceTree = "<group>"; };
 		46F8A80D10BD8291C59B0941 /* GitLabAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitLabAPIService.swift; sourceTree = "<group>"; };
-		AA11BB22CC33DD44EE550201 /* OAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthService.swift; sourceTree = "<group>"; };
 		49DE1A1A7F88F622FDA02915 /* AIAssistantService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantService.swift; sourceTree = "<group>"; };
 		4C241484075FA6059B05EF36 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		4E5D398F66E84BDF7A417DBD /* ContributionGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributionGraphView.swift; sourceTree = "<group>"; };
@@ -151,6 +152,10 @@
 		9A89AC132D8E2943EA1FE0F1 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		9F86BDA302F7AFA52B4EA5B9 /* AIAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAssistantView.swift; sourceTree = "<group>"; };
 		A297F3101454A355AF3C3EA2 /* CommitDiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitDiffView.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550101 /* WatchingReposView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchingReposView.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550102 /* WatchingReposViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchingReposViewModel.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550201 /* OAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthService.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550301 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		AA11BB22CC33DD44EE55FF00 /* ActivityEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityEvent.swift; sourceTree = "<group>"; };
 		AA11BB22CC33DD44EE55FF02 /* ActivityViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityViewModel.swift; sourceTree = "<group>"; };
 		AA11BB22CC33DD44EE55FF04 /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
@@ -162,8 +167,6 @@
 		BB22CC33DD44EE55FF001122 /* Pipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pipeline.swift; sourceTree = "<group>"; };
 		BB22CC33DD44EE55FF66AA11 /* UserProfileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileSheet.swift; sourceTree = "<group>"; };
 		BFF9E0A6AA973602431F2229 /* StarredReposView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarredReposView.swift; sourceTree = "<group>"; };
-		AA11BB22CC33DD44EE550101 /* WatchingReposView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchingReposView.swift; sourceTree = "<group>"; };
-		AA11BB22CC33DD44EE550102 /* WatchingReposViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchingReposViewModel.swift; sourceTree = "<group>"; };
 		C04F8F648E67254F8E88CA2A /* RepoInfoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoInfoSheet.swift; sourceTree = "<group>"; };
 		C468B03759AD7BE3E067694E /* ForksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForksView.swift; sourceTree = "<group>"; };
 		C5018B58C270CBAD34CBE9B8 /* Commit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Commit.swift; sourceTree = "<group>"; };
@@ -171,6 +174,7 @@
 		C6E573DCC2F1E19DDA93610E /* MergeRequestViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeRequestViewModel.swift; sourceTree = "<group>"; };
 		D2ECFFE13A7EEF6AFAE3FE43 /* MergeRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeRequest.swift; sourceTree = "<group>"; };
 		D3331A50E7CE25312F63C853 /* InboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550501 /* NotificationTargetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationTargetView.swift; sourceTree = "<group>"; };
 		D568745A9BA09253C620B064 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		DD44EE55FF66AA11BB22CC33 /* UserProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileViewModel.swift; sourceTree = "<group>"; };
 		DF6E693356EA96ABDE3D6487 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
@@ -317,6 +321,7 @@
 				37EFF949C8C5FA57DEDF967F /* Grit.entitlements */,
 				459EDBFBF9B69A21F0CF48E6 /* GritApp.swift */,
 				089F9B47AB39176F2C114239 /* Info.plist */,
+				AA11BB22CC33DD44EE550401 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Grit;
 			sourceTree = "<group>";
@@ -393,6 +398,7 @@
 			isa = PBXGroup;
 			children = (
 				D3331A50E7CE25312F63C853 /* InboxView.swift */,
+				AA11BB22CC33DD44EE550501 /* NotificationTargetView.swift */,
 			);
 			path = Inbox;
 			sourceTree = "<group>";
@@ -492,6 +498,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FBEA48CD84498AFD2B1E7845 /* Assets.xcassets in Resources */,
+				AA11BB22CC33DD44EE551401 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -542,6 +549,7 @@
 				ED52058906626E19AA00E902 /* BackgroundRefreshService.swift in Sources */,
 				99CD67A628BD0E808D30B9F0 /* InboxViewModel.swift in Sources */,
 				89BDD99B45A49328A1FE06E0 /* InboxView.swift in Sources */,
+				AA11BB22CC33DD44EE551501 /* NotificationTargetView.swift in Sources */,
 				78CA9EB1B9BFE6E4F74EB16A /* IssuesView.swift in Sources */,
 				E41EECED7BD2EF14D65329C1 /* IssuesViewModel.swift in Sources */,
 				37A01362332688229D1DAAC8 /* KeychainService.swift in Sources */,
@@ -598,7 +606,7 @@
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -630,7 +638,7 @@
 				DEVELOPMENT_TEAM = P22P7U46RW;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -686,7 +694,7 @@
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -718,7 +726,7 @@
 				DEVELOPMENT_TEAM = P22P7U46RW;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;

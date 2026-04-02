@@ -23,38 +23,81 @@ enum AppTab: Int, CaseIterable {
 struct MainTabView: View {
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var navState: AppNavigationState
+    @EnvironmentObject var settingsStore: SettingsStore
     @StateObject private var inboxVM = InboxViewModel()
 
     @State private var selectedTab: AppTab = .repositories
     @State private var showAIChat = false
 
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var aiService = AIAssistantService.shared
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
 
             // ── Native TabView ────────────────────────────────────────
+            // .id() causes SwiftUI to rebuild the TabView (and its UITabBarController)
+            // from scratch whenever the label-visibility setting changes, which is the
+            // only reliable way to get the tab bar to re-layout icon positions.
             TabView(selection: $selectedTab) {
-                Tab("Repositories", systemImage: "square.stack.3d.up", value: AppTab.repositories) {
-                    RepositoryListView()
-                }
+                if settingsStore.hideTabBarLabels {
+                    // Icon-only variant — SwiftUI centres icons natively when no title is present.
+                    Tab(value: AppTab.repositories) {
+                        RepositoryListView()
+                    } label: {
+                        Label("Repositories", systemImage: "square.stack.3d.up")
+                            .labelStyle(.iconOnly)
+                    }
 
-                Tab("Explore", systemImage: "safari", value: AppTab.explore) {
-                    ExploreView()
-                        .environmentObject(navState)
-                }
+                    Tab(value: AppTab.explore) {
+                        ExploreView()
+                            .environmentObject(navState)
+                    } label: {
+                        Label("Explore", systemImage: "safari")
+                            .labelStyle(.iconOnly)
+                    }
 
-                Tab("Inbox", systemImage: "tray.and.arrow.down", value: AppTab.inbox) {
-                    InboxView()
-                        .environmentObject(inboxVM)
-                        .environmentObject(navState)
-                }
-                .badge(inboxVM.unreadCount)
+                    Tab(value: AppTab.inbox) {
+                        InboxView()
+                            .environmentObject(inboxVM)
+                            .environmentObject(navState)
+                    } label: {
+                        Label("Inbox", systemImage: "tray.and.arrow.down")
+                            .labelStyle(.iconOnly)
+                    }
+                    .badge(inboxVM.unreadCount)
 
-                Tab("Profile", systemImage: "person.circle", value: AppTab.profile) {
-                    ProfileView()
+                    Tab(value: AppTab.profile) {
+                        ProfileView()
+                    } label: {
+                        Label("Profile", systemImage: "person.circle")
+                            .labelStyle(.iconOnly)
+                    }
+
+                } else {
+                    // Standard labelled variant.
+                    Tab("Repositories", systemImage: "square.stack.3d.up", value: AppTab.repositories) {
+                        RepositoryListView()
+                    }
+
+                    Tab("Explore", systemImage: "safari", value: AppTab.explore) {
+                        ExploreView()
+                            .environmentObject(navState)
+                    }
+
+                    Tab("Inbox", systemImage: "tray.and.arrow.down", value: AppTab.inbox) {
+                        InboxView()
+                            .environmentObject(inboxVM)
+                            .environmentObject(navState)
+                    }
+                    .badge(inboxVM.unreadCount)
+
+                    Tab("Profile", systemImage: "person.circle", value: AppTab.profile) {
+                        ProfileView()
+                    }
                 }
             }
+            .id(settingsStore.hideTabBarLabels)
 
             // ── Floating AI Panel — only when AI is user-enabled ──────
             if aiService.isUserEnabled {
@@ -75,7 +118,40 @@ struct MainTabView: View {
                     .zIndex(20)
             }
         }
-        // Close the panel if the user disables AI while it's open
+        // When the label-visibility setting changes, the TabView is rebuilt via .id().
+        // Capture the active tab first and restore it asynchronously after the rebuild
+        // so the user ends up on the same tab they were on.
+        .onChange(of: settingsStore.hideTabBarLabels) { _, _ in
+            let savedTab = selectedTab
+            Task { @MainActor in selectedTab = savedTab }
+        }
+        // Initial inbox load + start polling as soon as the tab view is alive.
+        .task {
+            await inboxVM.load()
+            inboxVM.startPolling()
+        }
+        // Pause polling when the app leaves the foreground; resume when it returns.
+        // On resume, silently try to refresh an OAuth token that may have expired
+        // while the phone was locked — this prevents 401 errors on the first poll.
+        // The BGAppRefreshTask covers background checks independently.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task {
+                    await AuthenticationService.shared.refreshOAuthTokenIfNeeded()
+                    inboxVM.startPolling()
+                }
+            } else if phase == .inactive || phase == .background {
+                inboxVM.stopPolling()
+            }
+        }
+        // Deep-link: switch to Inbox and navigate to the tapped notification.
+        .onChange(of: notificationService.pendingDeepLinkNotificationID) { _, notifID in
+            guard let id = notifID else { return }
+            selectedTab = .inbox
+            inboxVM.navigateToNotification(id: id)
+            notificationService.pendingDeepLinkNotificationID = nil
+        }
+        // Close the panel if the user disables AI while it's open.
         .onChange(of: aiService.isUserEnabled) { _, enabled in
             if !enabled { showAIChat = false }
         }

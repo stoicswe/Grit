@@ -5,7 +5,7 @@ struct InboxView: View {
     @EnvironmentObject var navState: AppNavigationState
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $viewModel.navigationPath) {
             VStack(spacing: 0) {
                 filterBar
                     .padding(.horizontal, 16)
@@ -46,7 +46,6 @@ struct InboxView: View {
             }
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.large)
-            .task { await viewModel.load() }
             .navigationDestination(for: MRNavigation.self) { nav in
                 MergeRequestDetailView(projectID: nav.projectID, mr: nav.mr)
                     .environmentObject(navState)
@@ -54,6 +53,12 @@ struct InboxView: View {
             .navigationDestination(for: GitLabIssue.self) { issue in
                 IssueDetailView(issue: issue, projectID: issue.projectID)
                     .environmentObject(navState)
+                    .onDisappear { viewModel.refreshAfterDetailDismiss() }
+            }
+            .navigationDestination(for: GitLabNotification.self) { notification in
+                NotificationTargetView(notification: notification)
+                    .environmentObject(navState)
+                    .environmentObject(viewModel)
             }
         }
     }
@@ -112,6 +117,63 @@ struct InboxView: View {
                 .listRowSeparator(.hidden)
             }
 
+            // ── Notifications ─────────────────────────────────────────────
+            if viewModel.showNotifications {
+                let unread = viewModel.notifications.filter { $0.unread }
+                let read   = viewModel.notifications.filter { !$0.unread }
+
+                if !unread.isEmpty {
+                    Section {
+                        ForEach(unread) { notification in
+                            NavigationLink(value: notification) {
+                                NotificationRowView(notification: notification)
+                            }
+                            .buttonStyle(.plain)
+                            .listRowBackground(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color.accentColor.opacity(0.06))
+                                    .padding(.vertical, 2)
+                                    .padding(.horizontal, 4)
+                            )
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button {
+                                    Task { await viewModel.markRead(notification) }
+                                } label: {
+                                    Label("Done", systemImage: "checkmark")
+                                }
+                                .tint(.green)
+                            }
+                        }
+                    } header: {
+                        Label("Unread · \(unread.count)", systemImage: "circle.fill")
+                            .foregroundStyle(Color.accentColor)
+                            .font(.system(size: 13, weight: .semibold))
+                            .textCase(nil)
+                    }
+                }
+
+                if !read.isEmpty {
+                    Section {
+                        ForEach(read) { notification in
+                            NavigationLink(value: notification) {
+                                NotificationRowView(notification: notification)
+                            }
+                            .buttonStyle(.plain)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                        }
+                    } header: {
+                        Text("Earlier")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                    }
+                }
+            }
+
             // ── Review Requested ──────────────────────────────────────────
             if viewModel.showReviewerMRs {
                 Section {
@@ -163,7 +225,7 @@ struct InboxView: View {
                         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button {
-                                Task { await viewModel.closeTask(issue) }
+                                Task { await viewModel.closeIssue(issue) }
                             } label: {
                                 Label("Close", systemImage: "checkmark.circle.fill")
                             }
@@ -188,6 +250,14 @@ struct InboxView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button {
+                                Task { await viewModel.closeIssue(issue) }
+                            } label: {
+                                Label("Close", systemImage: "checkmark.circle.fill")
+                            }
+                            .tint(.green)
+                        }
                     }
                 } header: {
                     inboxSectionHeader("My Open Issues",
@@ -196,52 +266,6 @@ struct InboxView: View {
                 }
             }
 
-            // ── Notifications ─────────────────────────────────────────────
-            if viewModel.showNotifications {
-                let unread = viewModel.notifications.filter { $0.unread }
-                let read   = viewModel.notifications.filter { !$0.unread }
-
-                if !unread.isEmpty {
-                    Section {
-                        ForEach(unread) { notification in
-                            NotificationRowView(notification: notification)
-                                .listRowBackground(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .fill(Color.accentColor.opacity(0.06))
-                                        .padding(.vertical, 2)
-                                        .padding(.horizontal, 4)
-                                )
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button {
-                                        Task { await viewModel.markRead(notification) }
-                                    } label: {
-                                        Label("Done", systemImage: "checkmark")
-                                    }
-                                    .tint(.green)
-                                }
-                        }
-                    } header: {
-                        Label("Unread · \(unread.count)", systemImage: "circle.fill")
-                            .foregroundStyle(Color.accentColor)
-                            .font(.system(size: 13, weight: .semibold))
-                            .textCase(nil)
-                    }
-                }
-
-                if !read.isEmpty {
-                    Section {
-                        ForEach(read) { notification in
-                            NotificationRowView(notification: notification)
-                                .listRowBackground(Color.clear)
-                        }
-                    } header: {
-                        Text("Earlier")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .textCase(nil)
-                    }
-                }
-            }
         }
         .listStyle(.plain)
         .refreshable { await viewModel.load() }

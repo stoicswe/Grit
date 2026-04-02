@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 // MARK: - Filter
 
@@ -42,9 +42,19 @@ final class InboxViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
 
+    /// Drives programmatic navigation inside InboxView's NavigationStack.
+    /// Push a GitLabNotification to open its NotificationTargetView directly.
+    @Published var navigationPath = NavigationPath()
+
     private let api                 = GitLabAPIService.shared
     private let auth                = AuthenticationService.shared
     private let notificationService = NotificationService.shared
+
+    /// How often to re-fetch while the inbox is visible in the foreground.
+    static let foregroundPollInterval: Duration = .seconds(60)
+
+    /// Running poll loop — cancelled when the inbox leaves the screen or the app backgrounds.
+    private var pollingTask: Task<Void, Never>?
 
     // MARK: Derived counts
 
@@ -71,6 +81,28 @@ final class InboxViewModel: ObservableObject {
     var isEmpty: Bool {
         !showReviewerMRs && !showAssignedMRs &&
         !showTasks && !showCreatedIssues && !showNotifications
+    }
+
+    // MARK: Foreground polling
+
+    /// Starts a 60-second poll loop. Cancels any previous loop first so it's
+    /// safe to call on every `onAppear` or foreground transition.
+    func startPolling() {
+        pollingTask?.cancel()
+        pollingTask = Task { [weak self] in
+            // Sleep first — the initial load is triggered separately via .task { await load() }.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.foregroundPollInterval)
+                guard !Task.isCancelled else { break }
+                await self?.load()
+            }
+        }
+    }
+
+    /// Stops the poll loop. Call when the inbox leaves the screen or the app backgrounds.
+    func stopPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
     }
 
     // MARK: Load
@@ -121,6 +153,10 @@ final class InboxViewModel: ObservableObject {
         notifications = notifs
         notificationService.unreadCount = unreadCount
         notificationService.setBadgeCount(unreadCount)
+
+        // Fire system banners for any notifications we haven't delivered yet.
+        // This covers the foreground case — background refresh handles the rest.
+        await BackgroundRefreshService.shared.processNewNotifications(notifs)
     }
 
     // MARK: Helpers
@@ -130,17 +166,33 @@ final class InboxViewModel: ObservableObject {
         if error == nil { error = err.localizedDescription }
     }
 
-    // MARK: Close / reopen task
+    // MARK: Close issue
 
-    /// Optimistically removes the task from the list, calls the GitLab API, and
-    /// restores it at its original position if the request fails.
-    func closeTask(_ issue: GitLabIssue) async {
+    /// Optimistically removes the issue from whichever inbox list it belongs to,
+    /// calls the GitLab API, and restores it at its original position if the
+    /// request fails. Works for both Tasks and My Open Issues.
+    func closeIssue(_ issue: GitLabIssue) async {
         guard let token = auth.accessToken else { return }
 
-        // Optimistic remove — instant feedback with no spinner needed.
-        guard let idx = tasks.firstIndex(where: { $0.id == issue.id }) else { return }
-        tasks.remove(at: idx)
+        // Determine which list owns this issue and remove it immediately.
+        if let idx = tasks.firstIndex(where: { $0.id == issue.id }) {
+            tasks.remove(at: idx)
+            if let err = await callClose(issue: issue, token: token) {
+                let insertAt = min(idx, tasks.count)
+                tasks.insert(issue, at: insertAt)
+                error = err.localizedDescription
+            }
+        } else if let idx = createdIssues.firstIndex(where: { $0.id == issue.id }) {
+            createdIssues.remove(at: idx)
+            if let err = await callClose(issue: issue, token: token) {
+                let insertAt = min(idx, createdIssues.count)
+                createdIssues.insert(issue, at: insertAt)
+                error = err.localizedDescription
+            }
+        }
+    }
 
+    private func callClose(issue: GitLabIssue, token: String) async -> Error? {
         do {
             _ = try await api.setIssueState(
                 projectID: issue.projectID,
@@ -149,11 +201,32 @@ final class InboxViewModel: ObservableObject {
                 baseURL:   auth.baseURL,
                 token:     token
             )
+            return nil
         } catch {
-            // Restore at the original index so the list doesn't jump around.
-            let insertAt = min(idx, tasks.count)
-            tasks.insert(issue, at: insertAt)
-            self.error = error.localizedDescription
+            return error
+        }
+    }
+
+    /// Called when the user navigates back from an issue detail view. Triggers a
+    /// lightweight reload so any state change made inside the detail (close/reopen)
+    /// is reflected in the inbox list without waiting for the next poll cycle.
+    func refreshAfterDetailDismiss() {
+        Task { await load() }
+    }
+
+    /// Deep-links into the notification with the given ID. If the notification is
+    /// already in the loaded list it pushes immediately; otherwise it reloads first
+    /// so the fresh data is available before pushing.
+    func navigateToNotification(id: Int) {
+        if let notification = notifications.first(where: { $0.id == id }) {
+            navigationPath.append(notification)
+        } else {
+            Task {
+                await load()
+                if let notification = notifications.first(where: { $0.id == id }) {
+                    navigationPath.append(notification)
+                }
+            }
         }
     }
 
