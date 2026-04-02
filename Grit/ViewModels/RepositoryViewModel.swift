@@ -1,15 +1,49 @@
 import Foundation
 import SwiftUI
 
+enum RepoSortOrder: String, CaseIterable, Identifiable {
+    case recentlyEdited = "Recently Edited"
+    case alphabetical   = "Alphabetical"
+    case newestFirst    = "Newest First"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .recentlyEdited: return "clock"
+        case .alphabetical:   return "textformat.abc"
+        case .newestFirst:    return "calendar.badge.plus"
+        }
+    }
+}
+
 @MainActor
 final class RepositoryViewModel: ObservableObject {
     @Published var repositories: [Repository] = []
     @Published var searchResults: [Repository] = []
+    @Published var sortOrder: RepoSortOrder = .recentlyEdited
     @Published var isLoading = false
     @Published var isSearching = false
     @Published var error: String?
     @Published var currentPage = 1
     @Published var hasMore = true
+
+    var sortedRepositories: [Repository] {
+        switch sortOrder {
+        case .recentlyEdited:
+            return repositories.sorted {
+                ($0.lastActivityAt ?? .distantPast) > ($1.lastActivityAt ?? .distantPast)
+            }
+        case .alphabetical:
+            return repositories.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        case .newestFirst:
+            return repositories.sorted {
+                ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast)
+            }
+        }
+    }
 
     /// Guards against concurrent pagination calls triggered by SwiftUI
     /// re-firing the load-more `onAppear` when the list re-renders.

@@ -12,6 +12,7 @@ struct Repository: Codable, Identifiable, Hashable {
     let starCount: Int
     let forksCount: Int
     let openIssuesCount: Int?
+    let createdAt: Date?
     let lastActivityAt: Date?
     let namespace: Namespace?
     let statistics: Statistics?
@@ -73,6 +74,7 @@ struct Repository: Codable, Identifiable, Hashable {
         case starCount = "star_count"
         case forksCount = "forks_count"
         case openIssuesCount = "open_issues_count"
+        case createdAt      = "created_at"
         case lastActivityAt = "last_activity_at"
         case markedForDeletionAt = "marked_for_deletion_at"
     }

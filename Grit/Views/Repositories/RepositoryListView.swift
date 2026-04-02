@@ -1,15 +1,21 @@
 import SwiftUI
 
+// Typed destinations for the Repositories NavigationStack
+enum RepoListDestination: Hashable {
+    case activity
+    case starred
+    case watching
+}
+
 struct RepositoryListView: View {
-    @Binding var showSearch: Bool
-    @EnvironmentObject var navState: AppNavigationState
     @StateObject private var viewModel = RepositoryViewModel()
     @ObservedObject private var starVM = StarredReposViewModel.shared
+    @State private var navigationPath  = NavigationPath()
     @State private var inlineSearchText = ""
     @State private var isInlineSearchActive = false
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             Group {
                 if isInlineSearchActive && !inlineSearchText.isEmpty {
                     searchResultsList
@@ -31,40 +37,54 @@ struct RepositoryListView: View {
             .refreshable { await viewModel.loadRepositories(refresh: true) }
             .navigationDestination(for: Repository.self) { repo in
                 RepositoryDetailView(repository: repo)
-                    .environmentObject(navState)
+            }
+            .navigationDestination(for: RepoListDestination.self) { destination in
+                switch destination {
+                case .activity: ActivityView()
+                case .starred:  StarredReposView()
+                case .watching: WatchingReposView()
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 8) {
-                        Button { showSearch = true } label: {
-                            Image(systemName: "magnifyingglass")
+                    Button {
+                        navigationPath.append(RepoListDestination.activity)
+                    } label: {
+                        Image(systemName: "waveform")
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Section("Sort By") {
+                            ForEach(RepoSortOrder.allCases) { order in
+                                Button {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        viewModel.sortOrder = order
+                                    }
+                                } label: {
+                                    Label(
+                                        order.rawValue,
+                                        systemImage: viewModel.sortOrder == order
+                                            ? "checkmark" : order.icon
+                                    )
+                                }
+                            }
                         }
 
-                        Menu {
-                            Section("Repositories") {
-                                NavigationLink {
-                                    ActivityView()
-                                        .environmentObject(navState)
-                                } label: {
-                                    Label("Activity", systemImage: "waveform")
-                                }
-                                NavigationLink {
-                                    StarredReposView()
-                                        .environmentObject(navState)
-                                } label: {
-                                    Label("Starred", systemImage: "star")
-                                }
+                        Section("Repositories") {
+                            Button {
+                                navigationPath.append(RepoListDestination.starred)
+                            } label: {
+                                Label("Starred", systemImage: "star")
                             }
-                            Section("App") {
-                                NavigationLink {
-                                    SettingsView()
-                                } label: {
-                                    Label("Preferences", systemImage: "gearshape")
-                                }
+                            Button {
+                                navigationPath.append(RepoListDestination.watching)
+                            } label: {
+                                Label("Watching", systemImage: "bell")
                             }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
                         }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
             }
@@ -83,9 +103,10 @@ struct RepositoryListView: View {
                 .listRowSeparator(.hidden)
             }
 
-            // Repos sorted so deletion-scheduled ones always appear at the bottom
-            let active  = viewModel.repositories.filter { !$0.isScheduledForDeletion }
-            let pending = viewModel.repositories.filter {  $0.isScheduledForDeletion }
+            // Apply sort then pin deletion-scheduled repos to the bottom
+            let sorted  = viewModel.sortedRepositories
+            let active  = sorted.filter { !$0.isScheduledForDeletion }
+            let pending = sorted.filter {  $0.isScheduledForDeletion }
 
             Section {
                 ForEach(active) { repo in
@@ -106,10 +127,14 @@ struct RepositoryListView: View {
                 }
             } header: {
                 if !viewModel.repositories.isEmpty {
-                    Text("\(viewModel.repositories.count) repositories")
-                        .textCase(nil)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text("\(viewModel.repositories.count) repositories")
+                        Text("·")
+                        Label(viewModel.sortOrder.rawValue, systemImage: viewModel.sortOrder.icon)
+                    }
+                    .textCase(nil)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
 
@@ -193,6 +218,12 @@ struct RepositoryRowView: View {
     let repo: Repository
     var isStarred: Bool = false
     var onToggleStar: (() -> Void)? = nil
+    var showPipeline: Bool = false
+
+    @State private var pipeline: Pipeline? = nil
+
+    private let api  = GitLabAPIService.shared
+    private let auth = AuthenticationService.shared
 
     var body: some View {
         HStack(spacing: 12) {
@@ -231,6 +262,9 @@ struct RepositoryRowView: View {
 
                 HStack(spacing: 10) {
                     VisibilityBadge(visibility: repo.visibility)
+                    if showPipeline, let pipeline {
+                        PipelineStatusBadge(pipeline: pipeline)
+                    }
                     starBadge
                     if let activity = repo.lastActivityAt {
                         Text(activity.relativeFormatted)
@@ -248,6 +282,17 @@ struct RepositoryRowView: View {
         }
         .padding(.vertical, 4)
         .opacity(repo.isScheduledForDeletion ? 0.72 : 1.0)
+        .task(id: showPipeline) {
+            guard showPipeline,
+                  let token  = auth.accessToken,
+                  let branch = repo.defaultBranch else { return }
+            pipeline = try? await api.fetchLatestPipeline(
+                projectID: repo.id,
+                ref: branch,
+                baseURL: auth.baseURL,
+                token: token
+            )
+        }
     }
 
     // MARK: - Deletion badge

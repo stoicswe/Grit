@@ -5,7 +5,7 @@ struct ContributionCell: View {
     var size: CGFloat = 11
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+        Circle()
             .fill(day.intensityColor)
             .frame(width: size, height: size)
     }

@@ -46,26 +46,10 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 8) {
-                        if viewModel.isBackgroundRefreshing {
-                            ProgressView().scaleEffect(0.75)
-                        }
-                        Button {
-                            Task { await viewModel.load() }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        Menu {
-                            Section("App") {
-                                NavigationLink {
-                                    SettingsView()
-                                } label: {
-                                    Label("Preferences", systemImage: "gearshape")
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                        }
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gearshape")
                     }
                 }
             }
@@ -118,10 +102,38 @@ struct ProfileView: View {
                     }
                     .foregroundStyle(.secondary)
                 }
+
+                if !user.socialLinks.isEmpty {
+                    socialLinksRow(user.socialLinks)
+                }
             }
             .frame(maxWidth: .infinity)
         }
         .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func socialLinksRow(_ links: [GitLabUser.SocialLink]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(links) { link in
+                    Link(destination: link.url) {
+                        HStack(spacing: 5) {
+                            Image(systemName: link.icon)
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(link.label)
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(.tint)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.accentColor.opacity(0.1),
+                                    in: Capsule())
+                    }
+                }
+            }
+        }
     }
 
     private func statsGrid(_ user: GitLabUser) -> some View {

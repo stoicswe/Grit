@@ -63,8 +63,7 @@ struct CodeEditorView: View {
                         Text("\(i + 1)")
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(.quaternary)
-                            .frame(width: gutterWidth, alignment: .trailing)
-                            .padding(.vertical, 0)
+                            .frame(width: gutterWidth, height: 18, alignment: .trailing)
                     }
                 }
                 .padding(.vertical, 14)

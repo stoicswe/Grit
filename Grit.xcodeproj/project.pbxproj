@@ -16,6 +16,8 @@
 		0C5323777160A0D18FE5D287 /* GitLabUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 399E41FACC8053BE0C35394A /* GitLabUser.swift */; };
 		160880D51970E7B5EB22E28A /* ContributionData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40A12A4C372DD9CF74B08696 /* ContributionData.swift */; };
 		172A3165384DA5D247B8D524 /* StarredReposView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF9E0A6AA973602431F2229 /* StarredReposView.swift */; };
+		AA11BB22CC33DD44EE551101 /* WatchingReposView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550101 /* WatchingReposView.swift */; };
+		AA11BB22CC33DD44EE551102 /* WatchingReposViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BB22CC33DD44EE550102 /* WatchingReposViewModel.swift */; };
 		1C07A75013D83244A69396FB /* MergeRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2ECFFE13A7EEF6AFAE3FE43 /* MergeRequest.swift */; };
 		25342B40F527DD36EBFF6A5C /* CommitListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EE8006AF01DFF08478ABC96 /* CommitListView.swift */; };
 		26FB721EB812D54F1DEEB67B /* MergeRequestListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA766C393F5375349C783AA /* MergeRequestListView.swift */; };
@@ -156,6 +158,8 @@
 		BB22CC33DD44EE55FF001122 /* Pipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pipeline.swift; sourceTree = "<group>"; };
 		BB22CC33DD44EE55FF66AA11 /* UserProfileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileSheet.swift; sourceTree = "<group>"; };
 		BFF9E0A6AA973602431F2229 /* StarredReposView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarredReposView.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550101 /* WatchingReposView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchingReposView.swift; sourceTree = "<group>"; };
+		AA11BB22CC33DD44EE550102 /* WatchingReposViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchingReposViewModel.swift; sourceTree = "<group>"; };
 		C04F8F648E67254F8E88CA2A /* RepoInfoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoInfoSheet.swift; sourceTree = "<group>"; };
 		C468B03759AD7BE3E067694E /* ForksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForksView.swift; sourceTree = "<group>"; };
 		C5018B58C270CBAD34CBE9B8 /* Commit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Commit.swift; sourceTree = "<group>"; };
@@ -194,6 +198,7 @@
 				E4088BB6C4C9D3D7A93DB6BA /* RepositoryDetailView.swift */,
 				0DE05624EBCF0AD3AEF75BF4 /* RepositoryListView.swift */,
 				BFF9E0A6AA973602431F2229 /* StarredReposView.swift */,
+				AA11BB22CC33DD44EE550101 /* WatchingReposView.swift */,
 				AA11BB22CC33DD44EE55FF04 /* ActivityView.swift */,
 			);
 			path = Repositories;
@@ -216,6 +221,7 @@
 				1ACCD29C6EA5FC26D052054C /* RepositoryViewModel.swift */,
 				0BA0317B294458AF8BC590F6 /* SearchViewModel.swift */,
 				5AED17E25BC6DA9FBE1774DE /* StarredReposViewModel.swift */,
+				AA11BB22CC33DD44EE550102 /* WatchingReposViewModel.swift */,
 				AA11BB22CC33DD44EE55FF02 /* ActivityViewModel.swift */,
 				DD44EE55FF66AA11BB22CC33 /* UserProfileViewModel.swift */,
 				51D2C3AB090AB4E4C8FF63FA /* InboxViewModel.swift */,
@@ -562,6 +568,8 @@
 				953929EDF46B4813B21C57F2 /* TipJarView.swift in Sources */,
 				E631E2AEAAB849CEA395A429 /* TipStore.swift in Sources */,
 				172A3165384DA5D247B8D524 /* StarredReposView.swift in Sources */,
+				AA11BB22CC33DD44EE551101 /* WatchingReposView.swift in Sources */,
+				AA11BB22CC33DD44EE551102 /* WatchingReposViewModel.swift in Sources */,
 				AA11BB22CC33DD44EE55FF01 /* ActivityEvent.swift in Sources */,
 				AA11BB22CC33DD44EE55FF03 /* ActivityViewModel.swift in Sources */,
 				AA11BB22CC33DD44EE55FF05 /* ActivityView.swift in Sources */,

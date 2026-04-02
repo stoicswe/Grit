@@ -18,10 +18,10 @@ struct ContributionDay: Identifiable {
 
     var intensityColor: Color {
         switch intensity {
-        case 0: return Color.white.opacity(0.08)
-        case 1: return Color.accentColor.opacity(0.3)
+        case 0: return Color(.secondarySystemFill)
+        case 1: return Color.accentColor.opacity(0.30)
         case 2: return Color.accentColor.opacity(0.55)
-        case 3: return Color.accentColor.opacity(0.75)
+        case 3: return Color.accentColor.opacity(0.78)
         default: return Color.accentColor
         }
     }
