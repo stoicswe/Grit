@@ -11,6 +11,7 @@ final class SettingsStore: ObservableObject {
 
     @AppStorage("appleIntelligenceEnabled") var appleIntelligenceEnabled: Bool = false
     @AppStorage("translateCommentsEnabled") var translateCommentsEnabled: Bool = true
+    @AppStorage("hideTabBarLabels")         var hideTabBarLabels:         Bool = false
 
     @AppStorage("accentColorR") private var accentColorR: Double = -1
     @AppStorage("accentColorG") private var accentColorG: Double = -1
