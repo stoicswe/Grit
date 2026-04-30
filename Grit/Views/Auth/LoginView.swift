@@ -181,6 +181,7 @@ struct LoginView: View {
                     }
                 }
                 .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .regularGlassEffect(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -192,6 +193,12 @@ struct LoginView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
             .buttonStyle(.plain)
+            // Re-declare the hit shape on the Button itself.  On iOS 26 real
+            // devices, a contentShape applied only inside the label is sometimes
+            // ignored when the label hosts a Liquid Glass effect — taps land on
+            // the glass overlay and never reach the button.  This outer
+            // contentShape guarantees the full row width receives touches.
+            .contentShape(Rectangle())
             .disabled(isLoggingIn || !gitLabComOAuthReady)
 
             // Info button
@@ -241,12 +248,19 @@ struct LoginView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .regularGlassEffect(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 // Declare the full card shape as the hit-test area so the entire
                 // surface is tappable, not just the visually-filled content pixels.
                 .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
             .buttonStyle(.plain)
+            // Re-declare the hit shape on the Button itself.  On iOS 26 real
+            // devices, a contentShape applied only inside the label is sometimes
+            // ignored when the label hosts a Liquid Glass effect — taps land on
+            // the glass overlay and never reach the button.  This outer
+            // contentShape guarantees the full row width receives touches.
+            .contentShape(Rectangle())
 
             // Info button
             Button { showAdvancedInfo = true } label: {
