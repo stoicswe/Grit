@@ -1,4 +1,4 @@
-![Xcode Cloud](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/stoicswe/8fc6bd69237f5d505ced66c91f95dc14/raw/grit-build.json)
+![Xcode Cloud](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/stoicswe/8fc6bd69237f5d505ced66c91f95dc14/raw/grit-build.json) [![CodeQL](https://github.com/stoicswe/Grit/actions/workflows/codeql.yml/badge.svg)](https://github.com/stoicswe/Grit/actions/workflows/codeql.yml)
 
 # Grit
 
