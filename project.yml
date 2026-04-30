@@ -25,6 +25,7 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "18.6"
+    scheme: {}
     sources:
       - path: Grit
       - path: Shared
@@ -60,6 +61,7 @@ targets:
     type: app-extension
     platform: iOS
     deploymentTarget: "18.6"
+    scheme: {}
     sources:
       - path: GritWidget
       - path: Shared
@@ -88,6 +90,7 @@ targets:
     type: app-extension
     platform: iOS
     deploymentTarget: "18.6"
+    scheme: {}
     sources:
       - path: GritShareExtension
     info:
