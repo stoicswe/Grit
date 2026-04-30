@@ -1,3 +1,4 @@
+![Xcode Cloud](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/stoicswe/8fc6bd69237f5d505ced66c91f95dc14/raw/grit-build.json)
 # Grit
 
 A native iOS GitLab client built with SwiftUI. Grit aims to provide a way to browse repositories, review merge requests, track pipelines, and monitor your GitLab workflow from an iPhone. Issues can be created and commented on as well, bringing together a collective set of management features to help in a pinch for when you're out and about.
@@ -36,6 +37,11 @@ Just some of the features of this application, with more to come as the project 
 - Background polling refreshes pipeline status while the view is open
 
 ---
+
+## Join the Test Flight!
+
+The public test flight for this app can be joined at this link: https://testflight.apple.com/join/4VWmabkT
+
 
 ## Architecture
 Grit follows **MVVM** with a unidirectional data flow:
