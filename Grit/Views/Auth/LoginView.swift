@@ -19,11 +19,19 @@ struct LoginView: View {
 
     var body: some View {
         // ── Transition ZStack — safe-area-aware layout root ─────────────────
-        // Backgrounds live in .background{} so they never affect the safe area
-        // geometry that the content views see.  Because this ZStack is a stable
-        // node in the view tree, HelloWorldBackground retains its @State (and
-        // keeps animating) across the landing ↔ advanced transition.
+        // Background views live as stable bottom siblings of the same ZStack
+        // (rather than inside `.background { ... }`).  On iOS 26 real devices,
+        // a `GeometryReader` + `.task` placed inside a `.background` closure can
+        // be deferred or never fire, leaving HelloWorldBackground frozen with
+        // zero bubbles.  Keeping it as a normal sibling guarantees its lifecycle
+        // hooks run, while `.ignoresSafeArea()` on each background layer keeps
+        // the safe-area geometry seen by the foreground content unaffected.
         ZStack {
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
+            HelloWorldBackground()
+                .ignoresSafeArea()
+
             if navigateToAdvanced {
                 AdvancedLoginView(onBack: {
                     withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
@@ -39,15 +47,6 @@ struct LoginView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Persistent backdrop: lives on the stable ZStack so it survives the
-        // content swap without resetting.
-        .background {
-            ZStack {
-                Color(.systemGroupedBackground)
-                HelloWorldBackground()
-            }
-            .ignoresSafeArea()
-        }
         .animation(.spring(duration: 0.3), value: errorMessage)
         .sheet(isPresented: $showGitLabInfo) {
             GitLabLoginInfoSheet()
