@@ -21,103 +21,108 @@ final class AIAssistantService: ObservableObject {
 
     private init() {
         #if canImport(FoundationModels)
-        isAvailable = SystemLanguageModel.default.isAvailable
+        if #available(iOS 26, *) {
+            isAvailable = SystemLanguageModel.default.isAvailable
+        }
         #endif
     }
 
     func analyzeCode(_ code: String, instruction: String) async throws -> String {
         #if canImport(FoundationModels)
-        guard isAvailable else { throw AIError.notAvailable }
-        isProcessing = true
-        defer { isProcessing = false }
+        if #available(iOS 26, *) {
+            guard isAvailable else { throw AIError.notAvailable }
+            isProcessing = true
+            defer { isProcessing = false }
 
-        let session = LanguageModelSession()
-        let prompt = """
-        You are a helpful code assistant. \(instruction)
+            let session = LanguageModelSession()
+            let prompt = """
+            You are a helpful code assistant, your goal is to help with understanding. \(instruction)
 
-        ```
-        \(code)
-        ```
-        """
-        let response = try await session.respond(to: prompt)
-        lastResponse = response.content
-        return response.content
-        #else
-        throw AIError.notAvailable
+            ```
+            \(code)
+            ```
+            """
+            let response = try await session.respond(to: prompt)
+            lastResponse = response.content
+            return response.content
+        }
         #endif
+        throw AIError.notAvailable
     }
 
     func reviewMergeRequest(title: String, description: String, diff: String) async throws -> String {
         #if canImport(FoundationModels)
-        guard isAvailable else { throw AIError.notAvailable }
-        isProcessing = true
-        defer { isProcessing = false }
+        if #available(iOS 26, *) {
+            guard isAvailable else { throw AIError.notAvailable }
+            isProcessing = true
+            defer { isProcessing = false }
 
-        let session = LanguageModelSession()
-        let prompt = """
-        Review this merge request concisely:
+            let session = LanguageModelSession()
+            let prompt = """
+            You are a senior software engineer, using your deep knowledge and undestanding, review this merge request concisely:
 
-        Title: \(title)
-        Description: \(description.isEmpty ? "No description provided." : description)
+            Title: \(title)
+            Description: \(description.isEmpty ? "No description provided." : description)
 
-        Changes (truncated):
-        \(diff.prefix(4000))
+            Changes (truncated):
+            \(diff.prefix(4000))
 
-        Provide:
-        1. A one-line summary
-        2. Key concerns or issues (if any)
-        3. Suggested improvements (if any)
-        """
-        let response = try await session.respond(to: prompt)
-        lastResponse = response.content
-        return response.content
-        #else
-        throw AIError.notAvailable
+            Provide:
+            1. A short paragraph to explain the change
+            2. Key concerns or issues (if any)
+            3. Suggested improvements (if any)
+            """
+            let response = try await session.respond(to: prompt)
+            lastResponse = response.content
+            return response.content
+        }
         #endif
+        throw AIError.notAvailable
     }
 
     func explainCommit(message: String, stats: String, diff: String) async throws -> String {
         #if canImport(FoundationModels)
-        guard isAvailable else { throw AIError.notAvailable }
-        isProcessing = true
-        defer { isProcessing = false }
+        if #available(iOS 26, *) {
+            guard isAvailable else { throw AIError.notAvailable }
+            isProcessing = true
+            defer { isProcessing = false }
 
-        let session = LanguageModelSession()
+            let session = LanguageModelSession()
 
-        var prompt = """
-        You are a senior software engineer reviewing a Git commit. \
-        Explain clearly what this commit does, why it likely matters, and highlight \
-        any notable implementation choices visible in the diff.
+            var prompt = """
+            You are a senior software engineer reviewing a Git commit. \
+            Explain clearly what this commit does, why it likely matters, and highlight \
+            any notable implementation choices visible in the diff.
 
-        ## Commit Message
-        \(message)
+            ## Commit Message
+            \(message)
 
-        ## Change Stats
-        \(stats)
+            ## Change Stats
+            \(stats)
 
-        """
+            """
 
-        if !diff.isEmpty {
+            if !diff.isEmpty {
+                prompt += """
+
+            ## File Diffs
+            \(diff)
+
+            """
+            }
+
             prompt += """
 
-        ## File Diffs
-        \(diff)
+            Respond in plain prose — no bullet points, no headers. \
+            2–4 sentences. Focus on intent and impact, not line-by-line narration.
+            """
 
-        """
+            let response = try await session.respond(to: prompt)
+            lastResponse = response.content
+            return response.content
         }
-
-        prompt += """
-
-        Respond in plain prose — no bullet points, no headers. \
-        2–4 sentences. Focus on intent and impact, not line-by-line narration.
-        """
-
-        let response = try await session.respond(to: prompt)
-        lastResponse = response.content
-        return response.content
-        #else
-        throw AIError.notAvailable
         #endif
+        throw AIError.notAvailable
     }
 
     enum AIError: LocalizedError {

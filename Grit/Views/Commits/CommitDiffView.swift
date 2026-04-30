@@ -184,7 +184,7 @@ private struct FileDiffCard: View {
                 // Ensure the VStack is at least as wide as the card
                 .frame(minWidth: cardWidth, alignment: .leading)
             }
-            .background(Color.black.opacity(0.2))
+            .background(Color(UIColor.systemBackground).opacity(0.6))
         }
     }
 
@@ -226,19 +226,19 @@ private struct DiffLineRow: View {
 
     private var bgColor: Color {
         switch line.kind {
-        case .added:      return Color.green.opacity(0.12)
-        case .removed:    return Color.red.opacity(0.12)
-        case .hunkHeader: return Color.accentColor.opacity(0.1)
+        case .added:      return Color.green.opacity(0.22)
+        case .removed:    return Color.red.opacity(0.22)
+        case .hunkHeader: return Color.accentColor.opacity(0.15)
         default:          return Color.clear
         }
     }
 
     private var gutterColor: Color {
         switch line.kind {
-        case .added:      return Color.green.opacity(0.25)
-        case .removed:    return Color.red.opacity(0.25)
-        case .hunkHeader: return Color.accentColor.opacity(0.2)
-        default:          return Color.primary.opacity(0.04)
+        case .added:      return Color.green.opacity(0.35)
+        case .removed:    return Color.red.opacity(0.35)
+        case .hunkHeader: return Color.accentColor.opacity(0.25)
+        default:          return Color.primary.opacity(0.06)
         }
     }
 
@@ -299,8 +299,8 @@ private struct DiffLineRow: View {
 
     private var contentColor: Color {
         switch line.kind {
-        case .added:   return Color(UIColor.systemGreen).opacity(0.9)
-        case .removed: return Color(UIColor.systemRed).opacity(0.9)
+        case .added:   return .primary
+        case .removed: return .primary
         case .meta:    return .secondary
         default:       return .primary
         }
@@ -312,7 +312,7 @@ private struct DiffLineRow: View {
             if let n = number {
                 Text("\(n)")
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(.secondary)
             } else {
                 Text(" ")
                     .font(.system(size: 10, design: .monospaced))

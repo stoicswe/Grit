@@ -230,7 +230,7 @@ final class OAuthService: NSObject {
 
 // MARK: - Presentation context
 
-extension OAuthService: @preconcurrency ASWebAuthenticationPresentationContextProviding {
+extension OAuthService: ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }

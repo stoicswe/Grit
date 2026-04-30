@@ -1,8 +1,8 @@
 name: Grit
 options:
-  bundleIdPrefix: com.grit
+  bundleIdPrefix: com.stoicswe.grit
   deploymentTarget:
-    iOS: "26.0"
+    iOS: "18.6"
   xcodeVersion: "16.3"
   generateEmptyDirectories: true
   groupSortPosition: top
@@ -10,19 +10,31 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    DEVELOPMENT_TEAM: ""
-    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    DEVELOPMENT_TEAM: "P22P7U46RW"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.6"
     TARGETED_DEVICE_FAMILY: "1"
     SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
     SWIFT_STRICT_CONCURRENCY: minimal
+    # Tells the Swift compiler to extract localizable strings from SwiftUI Text()
+    # literals and String(localized:) calls into Localizable.xcstrings automatically
+    # on every build. New strings appear as "New" state in the catalog for translation.
+    SWIFT_EMIT_LOC_STRINGS: YES
 
 targets:
   Grit:
     type: application
     platform: iOS
-    deploymentTarget: "26.0"
+    deploymentTarget: "18.6"
+    scheme: {}
     sources:
       - path: Grit
+      - path: Shared
+      - path: LICENSE
+        type: file
+        buildPhase: resources
+    dependencies:
+      - target: GritWidget
+        embed: true
     info:
       path: Grit/Info.plist
       properties:
@@ -31,11 +43,61 @@ targets:
           - UIInterfaceOrientationPortrait
     entitlements:
       path: Grit/Grit.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.stoicswe.grit.app
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.grit.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.stoicswe.grit.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         INFOPLIST_FILE: Grit/Info.plist
         CODE_SIGN_ENTITLEMENTS: Grit/Grit.entitlements
         ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+
+  GritWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.6"
+    scheme: {}
+    sources:
+      - path: GritWidget
+      - path: Shared
+    info:
+      path: GritWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Grit Widget
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: GritWidget/GritWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.stoicswe.grit.app
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stoicswe.grit.app.GritWidget
+        INFOPLIST_FILE: GritWidget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: GritWidget/GritWidget.entitlements
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../../Frameworks"
+
+  GritShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.6"
+    scheme: {}
+    sources:
+      - path: GritShareExtension
+    info:
+      path: GritShareExtension/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.stoicswe.grit.app.GritShareExtension
+        INFOPLIST_FILE: GritShareExtension/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"

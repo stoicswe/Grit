@@ -1,64 +1,43 @@
 import SwiftUI
 
 /// Shown on launch while `AuthenticationService.restoreSession()` is running.
-/// Matches the LoginView gradient + logo so the transition is seamless.
+/// Uses the system background so it adapts to light and dark mode, matching
+/// the `LoginView` aesthetic.
 struct SplashView: View {
     var body: some View {
         ZStack {
-            // Background gradient — mirrors LoginView
-            LinearGradient(
-                colors: [
-                    Color(red: 0.07, green: 0.07, blue: 0.12),
-                    Color(red: 0.04, green: 0.04, blue: 0.08),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-
-            // Glow orbs
-            Circle()
-                .fill(Color.accentColor.opacity(0.15))
-                .frame(width: 300).blur(radius: 80)
-                .offset(x: -80, y: -120)
-            Circle()
-                .fill(Color.purple.opacity(0.1))
-                .frame(width: 250).blur(radius: 80)
-                .offset(x: 80, y: 200)
+            Color(.systemGroupedBackground).ignoresSafeArea()
 
             VStack(spacing: 24) {
-                // Logo
+                // Logo — mirrors LoginView
                 ZStack {
                     Circle()
                         .fill(.ultraThinMaterial)
-                        .frame(width: 88, height: 88)
-                        .overlay(Circle().strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
-                    Image(systemName: "diamond.fill")
-                        .font(.system(size: 38, weight: .light))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.accentColor, .purple],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                        .frame(width: 90, height: 90)
+                        .overlay(
+                            Circle().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
                         )
+                    Image("GritIcon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 90, height: 90)
+                        .clipShape(Circle())
                 }
-                .shadow(color: .accentColor.opacity(0.3), radius: 20)
+                .shadow(color: .accentColor.opacity(0.22), radius: 20)
 
-                VStack(spacing: 6) {
+                VStack(spacing: 5) {
                     Text("Grit")
                         .font(.system(size: 36, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                     Text("GitLab for iPhone")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.secondary)
                 }
 
                 ProgressView()
-                    .tint(.white.opacity(0.6))
+                    .tint(.secondary)
                     .padding(.top, 8)
             }
         }
-        .preferredColorScheme(.dark)
     }
 }

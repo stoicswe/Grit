@@ -5,6 +5,7 @@ import SwiftUI
 final class UserProfileViewModel: ObservableObject {
     @Published var user:                GitLabUser?
     @Published var repos:               [Repository]  = []
+    @Published var groups:              [GitLabGroup] = []
     @Published var followers:           [GitLabUser]  = []
     @Published var isFollowing:         Bool          = false
     @Published var isLoading:           Bool          = false
@@ -21,6 +22,7 @@ final class UserProfileViewModel: ObservableObject {
     private struct CacheEntry: Codable {
         let user:      GitLabUser
         let repos:     [Repository]
+        let groups:    [GitLabGroup]
         let followers: [GitLabUser]
         let savedAt:   Date
 
@@ -54,6 +56,7 @@ final class UserProfileViewModel: ObservableObject {
         if let cached = readCache(for: userID) {
             user        = cached.user
             repos       = cached.repos
+            groups      = cached.groups
             followers   = cached.followers
             isFollowing = cached.user.isFollowing ?? false
             scheduleBackgroundRefresh(userID: userID, token: token)
@@ -84,18 +87,26 @@ final class UserProfileViewModel: ObservableObject {
     private func fetchAndPublish(userID: Int, token: String) async {
         let baseURL = auth.baseURL
         do {
+            // Fetch user, repos, and followers concurrently (all throwing).
             async let userTask      = api.fetchUser(id: userID, baseURL: baseURL, token: token)
             async let reposTask     = api.fetchUserProjects(userID: userID, baseURL: baseURL, token: token)
             async let followersTask = api.fetchUserFollowers(userID: userID, baseURL: baseURL, token: token)
-            let (fetchedUser, fetchedRepos, fetchedFollowers) = try await (userTask, reposTask, followersTask)
+            let (fetchedUser, fetchedRepos, fetchedFollowers) =
+                try await (userTask, reposTask, followersTask)
+
+            // Groups are best-effort (non-throwing) — fetch after the main trio resolves.
+            let fetchedGroups = await api.fetchUserGroupMemberships(
+                userID: userID, baseURL: baseURL, token: token)
 
             user        = fetchedUser
             repos       = fetchedRepos
+            groups      = fetchedGroups
             followers   = fetchedFollowers
             isFollowing = fetchedUser.isFollowing ?? false
 
             let entry = CacheEntry(user: fetchedUser, repos: fetchedRepos,
-                                   followers: fetchedFollowers, savedAt: Date())
+                                   groups: fetchedGroups, followers: fetchedFollowers,
+                                   savedAt: Date())
             writeCache(entry, for: userID)
         } catch {
             if user == nil { self.error = error.localizedDescription }

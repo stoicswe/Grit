@@ -194,13 +194,13 @@ struct IssueRowView: View {
                     }
 
                     // Labels + comment count
-                    if !issue.labels.isEmpty || issue.userNotesCount > 0 {
+                    if !issue.labelDetails.isEmpty || issue.userNotesCount > 0 {
                         HStack(spacing: 6) {
-                            ForEach(issue.labels.prefix(3), id: \.self) { label in
-                                labelChip(label)
+                            ForEach(Array(issue.labelDetails.prefix(3))) { detail in
+                                labelChip(detail)
                             }
-                            if issue.labels.count > 3 {
-                                Text("+\(issue.labels.count - 3)")
+                            if issue.labelDetails.count > 3 {
+                                Text("+\(issue.labelDetails.count - 3)")
                                     .font(.system(size: 10))
                                     .foregroundStyle(.secondary)
                             }
@@ -227,13 +227,15 @@ struct IssueRowView: View {
         )
     }
 
-    private func labelChip(_ text: String) -> some View {
-        Text(text)
+    private func labelChip(_ detail: IssueLabelDetail) -> some View {
+        let fallback = SettingsStore.shared.accentColor ?? Color.accentColor
+        let c = detail.swiftUIColor(fallback: fallback)
+        return Text(detail.name)
             .font(.system(size: 10))
             .lineLimit(1)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(Color.accentColor.opacity(0.12), in: Capsule())
-            .foregroundStyle(.tint)
+            .background(c.opacity(0.15), in: Capsule())
+            .foregroundStyle(c)
     }
 }

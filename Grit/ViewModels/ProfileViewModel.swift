@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import WidgetKit
 
 @MainActor
 final class ProfileViewModel: ObservableObject {
@@ -113,13 +114,37 @@ final class ProfileViewModel: ObservableObject {
             user              = fetchedUser
             ownedRepositories = repos
             followers         = fetchedFollowers
-            contributionStats = ContributionStats.build(from: events)
+            let stats = ContributionStats.build(from: events)
+            contributionStats = stats
             writeCache(user: fetchedUser, repos: repos,
                        followers: fetchedFollowers, events: events)
+            writeWidgetData(stats: stats, username: fetchedUser.username)
+            WidgetCenter.shared.reloadAllTimelines()
         } catch {
             // Only surface the error on a cold load; background failures are silent
             if user == nil { self.error = error.localizedDescription }
         }
+    }
+
+    private func writeWidgetData(stats: ContributionStats, username: String) {
+        let settings = SettingsStore.shared
+        let colorRGB: WidgetDataStore.ContributionSnapshot.ColorRGB? = {
+            guard let color = settings.accentColor else { return nil }
+            var r: CGFloat = 0; var g: CGFloat = 0; var b: CGFloat = 0; var a: CGFloat = 0
+            UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a)
+            return .init(r: Double(r), g: Double(g), b: Double(b))
+        }()
+
+        let snapshot = WidgetDataStore.ContributionSnapshot(
+            days: stats.days.map { .init(date: $0.date, count: $0.count) },
+            totalContributions: stats.totalContributions,
+            currentStreak: stats.currentStreak,
+            longestStreak: stats.longestStreak,
+            username: username,
+            updatedAt: Date(),
+            accentColorRGB: colorRGB
+        )
+        WidgetDataStore.save(snapshot)
     }
 
     private func fetchAllEvents(username: String,

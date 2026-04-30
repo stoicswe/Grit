@@ -22,7 +22,22 @@ struct MergeRequestListView: View {
             }
 
             if viewModel.isLoading && displayedMRs.isEmpty {
-                ProgressView().padding()
+                ForEach(0..<3, id: \.self) { _ in
+                    VStack(alignment: .leading, spacing: 10) {
+                        ShimmerView().frame(height: 22).frame(maxWidth: 80)
+                        ShimmerView().frame(height: 16).frame(maxWidth: .infinity)
+                        ShimmerView().frame(height: 11).frame(maxWidth: 200)
+                        ShimmerView().frame(height: 11).frame(maxWidth: 160)
+                    }
+                    .padding(14)
+                    .background(.ultraThinMaterial,
+                                in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(.white.opacity(0.15), lineWidth: 0.5)
+                    )
+                }
+                .transition(.opacity)
             } else if displayedMRs.isEmpty {
                 emptyState
             } else {
@@ -31,9 +46,11 @@ struct MergeRequestListView: View {
                         MergeRequestRowView(mr: mr)
                     }
                     .buttonStyle(.plain)
+                    .transition(.opacity)
                 }
             }
         }
+        .animation(.easeOut(duration: 0.25), value: displayedMRs.isEmpty)
         .navigationDestination(for: MRNavigation.self) { nav in
             MergeRequestDetailView(projectID: nav.projectID, mr: nav.mr)
         }
@@ -163,16 +180,18 @@ struct MergeRequestRowView: View {
                 }
 
                 // Labels
-                if let labels = mr.labels, !labels.isEmpty {
+                if let details = mr.labelDetails, !details.isEmpty {
+                    let fallback = SettingsStore.shared.accentColor ?? Color.accentColor
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 4) {
-                            ForEach(labels, id: \.self) { label in
-                                Text(label)
+                            ForEach(details) { detail in
+                                let c = detail.swiftUIColor(fallback: fallback)
+                                Text(detail.name)
                                     .font(.system(size: 10))
                                     .padding(.horizontal, 7)
                                     .padding(.vertical, 3)
-                                    .background(.quaternary, in: Capsule())
-                                    .foregroundStyle(.secondary)
+                                    .background(c.opacity(0.15), in: Capsule())
+                                    .foregroundStyle(c)
                             }
                         }
                     }

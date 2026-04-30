@@ -1,0 +1,41 @@
+# .swiftlint.yml
+disabled_rules:
+  - trailing_whitespace       # SwiftFormat handles this
+
+opt_in_rules:
+  - force_unwrapping
+  - empty_count
+  - closure_spacing
+  - contains_over_filter_count
+  - explicit_init
+  - fatal_error_message
+  - first_where
+  - implicitly_unwrapped_optional
+  - private_outlet
+  - sorted_imports
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+
+included:
+  - Grit
+
+excluded:
+  - .build
+  - Pods
+  - DerivedData
+
+line_length:
+  warning: 120
+  error: 160
+
+type_body_length:
+  warning: 300
+  error: 400
+
+file_length:
+  warning: 500
+  error: 700
+
+function_body_length:
+  warning: 40
+  error: 60

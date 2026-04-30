@@ -12,9 +12,12 @@ struct TipJarView: View {
 
     // Human-readable labels keyed by product ID
     private let meta: [String: (emoji: String, label: String, detail: String)] = [
-        "com.grit.tip.small":  ("☕",  "Small Coffee",  "A quick espresso to keep me going"),
-        "com.grit.tip.medium": ("☕☕", "Large Coffee",  "A flat white for a longer coding session"),
-        "com.grit.tip.large":  ("🎁",  "Custom Amount", "Name your own price — every bit helps!")
+        "com.grit.tip.small":  ("🙌", "High Five!",      "A quick high-five to keep me going"),
+        "com.grit.tip.medium": ("☕",  "Small Coffee",    "A quick espresso shot"),
+        "com.grit.tip.large":  ("☕",  "Medium Coffee",   "A flat white for a coding session"),
+        "com.grit.tip.xlarge": ("☕",  "Large Coffee",    "A grande to fuel a long night"),
+        "com.grit.tip.bag":    ("🛍️", "Bag o' Coffee",   "A whole bag of beans — serious fuel"),
+        "com.grit.tip.crate":  ("📦", "Crate o' Coffee", "Enough coffee to mass-produce features")
     ]
 
     var body: some View {
@@ -108,7 +111,7 @@ struct TipJarView: View {
                 Text(errorMessage)
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
 

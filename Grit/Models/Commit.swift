@@ -14,6 +14,9 @@ struct Commit: Codable, Identifiable {
     let webURL: String
     let stats: CommitStats?
     let parentIds: [String]?
+    /// Present in global search results (`GET /search?scope=commits`); nil from
+    /// per-project endpoints where the project ID is already known from context.
+    let projectID: Int?
 
     var shortSHA: String { String(id.prefix(8)) }
 
@@ -34,5 +37,6 @@ struct Commit: Codable, Identifiable {
         case committerEmail = "committer_email"
         case webURL = "web_url"
         case parentIds = "parent_ids"
+        case projectID = "project_id"
     }
 }

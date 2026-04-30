@@ -5,8 +5,10 @@ import SwiftUI
 /// Presents a floating, centred glass popup over the current screen.
 /// Tap the dimmed background or the × button to dismiss.
 struct RepoInfoOverlay: View {
-    let repository:  Repository
-    let projectID:   Int
+    let repository:     Repository
+    let projectID:      Int
+    let pipeline:       Pipeline?
+    let onPipelineTap:  (() -> Void)?
     @Binding var isPresented: Bool
 
     @StateObject private var viewModel = RepoInfoViewModel()
@@ -28,6 +30,8 @@ struct RepoInfoOverlay: View {
             RepoInfoCard(
                 repository:           repository,
                 viewModel:            viewModel,
+                pipeline:             pipeline,
+                onPipelineTap:        onPipelineTap,
                 showAllContributors:  $showAllContributors,
                 onDismiss: {
                     withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
@@ -36,7 +40,7 @@ struct RepoInfoOverlay: View {
                 }
             )
             .padding(.horizontal, 16)
-            .padding(.vertical, 40)
+            .padding(.vertical, 12)
             .transition(
                 .asymmetric(
                     insertion:  .scale(scale: 0.88).combined(with: .opacity),
@@ -47,8 +51,14 @@ struct RepoInfoOverlay: View {
         .task {
             await viewModel.load(
                 projectID: projectID,
-                ref: repository.defaultBranch ?? "main"
+                ref: repository.defaultBranch ?? "main",
+                pipeline: pipeline
             )
+            if let desc = repository.description,
+               !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let readme = viewModel.readmeContent {
+                await viewModel.generateDescriptionSummary(description: desc, readme: readme)
+            }
         }
         .sheet(isPresented: $showAllContributors) {
             ContributorsSheet(contributors: viewModel.contributors)
@@ -58,9 +68,18 @@ struct RepoInfoOverlay: View {
 
 // MARK: - Card
 
+private struct StageSummary: Identifiable {
+    let name:  String
+    let color: Color
+    let icon:  String
+    var id: String { name }
+}
+
 private struct RepoInfoCard: View {
     let repository:          Repository
     @ObservedObject var viewModel: RepoInfoViewModel
+    let pipeline:            Pipeline?
+    let onPipelineTap:       (() -> Void)?
     @Binding var showAllContributors: Bool
     let onDismiss: () -> Void
 
@@ -75,27 +94,20 @@ private struct RepoInfoCard: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     metadataSection
+                    buildStatusSection
                     contributorsSection
                     if let desc = repository.description,
                        !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         descriptionSection(desc)
                     }
-                    readmeSection
                 }
                 .padding(20)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(.regularMaterial)
-                .shadow(color: .black.opacity(0.22), radius: 40, y: 16)
-                .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color(.separator).opacity(0.55), lineWidth: 0.5)
-        )
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .regularGlassEffect(in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: .black.opacity(0.22), radius: 40, y: 16)
+        .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
     }
 
     // MARK: Top bar
@@ -198,6 +210,131 @@ private struct RepoInfoCard: View {
         return String(format: "%.0f KB", kb)
     }
 
+    // MARK: Build Status
+
+    @ViewBuilder
+    private var buildStatusSection: some View {
+        if let pipeline {
+            VStack(alignment: .leading, spacing: 10) {
+                GlassSectionHeader(title: "Build Status")
+
+                Button {
+                    onPipelineTap?()
+                } label: {
+                    VStack(alignment: .leading, spacing: 10) {
+                        // Overall pipeline status + branch ref + tap hint
+                        HStack(spacing: 8) {
+                            PipelineStatusBadge(pipeline: pipeline)
+                            Spacer()
+                            if let ref = pipeline.ref {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.triangle.branch")
+                                        .font(.system(size: 9, weight: .medium))
+                                    Text(ref)
+                                        .font(.system(size: 11))
+                                }
+                                .foregroundStyle(.secondary)
+                            }
+                            if onPipelineTap != nil {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+
+                        // Stage breakdown — shimmers while loading, chips when ready
+                        if viewModel.isLoading {
+                            HStack(spacing: 0) {
+                                ForEach(0..<3, id: \.self) { idx in
+                                    ShimmerView()
+                                        .frame(width: 72, height: 28)
+                                        .clipShape(Capsule())
+                                    if idx < 2 { stageConnector }
+                                }
+                            }
+                        } else if !viewModel.pipelineJobs.isEmpty {
+                            let stages = buildStageSummaries(viewModel.pipelineJobs)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 0) {
+                                    ForEach(Array(stages.enumerated()), id: \.element.id) { idx, stage in
+                                        stageChip(stage)
+                                        if idx < stages.count - 1 { stageConnector }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .background(
+                        Color(.secondarySystemFill),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(onPipelineTap == nil)
+            }
+        }
+    }
+
+    private var stageConnector: some View {
+        HStack(spacing: 1) {
+            Rectangle()
+                .frame(width: 10, height: 1.5)
+                .foregroundStyle(Color.secondary.opacity(0.25))
+            Image(systemName: "chevron.right")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(Color.secondary.opacity(0.35))
+        }
+        .padding(.horizontal, 3)
+    }
+
+    private func stageChip(_ stage: StageSummary) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: stage.icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text(stage.name)
+                .font(.system(size: 12, weight: .medium))
+        }
+        .foregroundStyle(stage.color)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(stage.color.opacity(0.12), in: Capsule())
+        .overlay(Capsule().strokeBorder(stage.color.opacity(0.3), lineWidth: 0.5))
+    }
+
+    private func buildStageSummaries(_ jobs: [PipelineJob]) -> [StageSummary] {
+        var seen = Set<String>()
+        var orderedStages = [String]()
+        for job in jobs {
+            if seen.insert(job.stage).inserted { orderedStages.append(job.stage) }
+        }
+        return orderedStages.map { stageName in
+            let stageJobs = jobs.filter { $0.stage == stageName }
+            let (color, icon) = worstStatus(for: stageJobs)
+            return StageSummary(name: stageName, color: color, icon: icon)
+        }
+    }
+
+    private func worstStatus(for jobs: [PipelineJob]) -> (Color, String) {
+        if jobs.contains(where: { $0.status == "failed" && !$0.allowFailure }) {
+            return (.red, "xmark.circle.fill")
+        }
+        if jobs.contains(where: { $0.status == "running" }) {
+            return (.blue, "arrow.trianglehead.2.clockwise.rotate.90.circle.fill")
+        }
+        if jobs.contains(where: { ["pending", "created", "waiting_for_resource", "preparing"].contains($0.status) }) {
+            return (.orange, "clock.fill")
+        }
+        let nonFatal = jobs.allSatisfy {
+            $0.status == "success" || ($0.status == "failed" && $0.allowFailure) || $0.status == "skipped"
+        }
+        if nonFatal { return (.green, "checkmark.circle.fill") }
+        if jobs.contains(where: { $0.status == "canceled" }) {
+            return (Color.secondary, "slash.circle.fill")
+        }
+        return (Color.secondary, "forward.fill")
+    }
+
     // MARK: Contributors
 
     private var contributorsSection: some View {
@@ -272,6 +409,29 @@ private struct RepoInfoCard: View {
         VStack(alignment: .leading, spacing: 10) {
             GlassSectionHeader(title: "Description")
             MarkdownRendererView(source: desc)
+
+            if viewModel.isGeneratingSummary {
+                VStack(spacing: 6) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        ShimmerView().frame(height: 12).frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.top, 4)
+            } else if let summary = viewModel.readmeSummary {
+                Text(summary)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 10))
+                    Text("Summarized from README using Apple Intelligence")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(.tertiary)
+                .padding(.top, 2)
+            }
         }
     }
 

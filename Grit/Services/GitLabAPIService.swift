@@ -39,6 +39,18 @@ actor GitLabAPIService {
         }
     }
 
+    // MARK: - Failable array element wrapper
+
+    /// Wraps a single Decodable element so that a JSON array can be decoded
+    /// with per-element error tolerance — items whose fields don't match the
+    /// expected schema are silently dropped instead of failing the whole request.
+    private struct Safe<T: Decodable>: Decodable {
+        let value: T?
+        init(from decoder: Decoder) throws {
+            value = try? T(from: decoder)
+        }
+    }
+
     // MARK: - Generic Request
 
     private func request<T: Decodable>(
@@ -172,6 +184,81 @@ actor GitLabAPIService {
         }
     }
 
+    // MARK: - Award Emoji (Votes)
+
+    struct AwardEmoji: Decodable, Identifiable {
+        let id:   Int
+        let name: String
+        let user: AwardEmojiUser
+
+        struct AwardEmojiUser: Decodable { let id: Int }
+    }
+
+    func fetchAwardEmojis(
+        projectID: Int,
+        issueIID:  Int,
+        baseURL:   String,
+        token:     String
+    ) async throws -> [AwardEmoji] {
+        return try await request(
+            "projects/\(projectID)/issues/\(issueIID)/award_emoji",
+            baseURL: baseURL,
+            token:   token,
+            queryItems: [URLQueryItem(name: "per_page", value: "100")]
+        )
+    }
+
+    @discardableResult
+    func addAwardEmoji(
+        projectID: Int,
+        issueIID:  Int,
+        name:      String,
+        baseURL:   String,
+        token:     String
+    ) async throws -> AwardEmoji {
+        struct Body: Encodable { let name: String }
+        return try await post(
+            "projects/\(projectID)/issues/\(issueIID)/award_emoji",
+            baseURL: baseURL,
+            token:   token,
+            body:    Body(name: name)
+        )
+    }
+
+    func deleteAwardEmoji(
+        projectID: Int,
+        issueIID:  Int,
+        awardID:   Int,
+        baseURL:   String,
+        token:     String
+    ) async throws {
+        try await voidPost(
+            "projects/\(projectID)/issues/\(issueIID)/award_emoji/\(awardID)",
+            baseURL: baseURL,
+            token:   token,
+            method:  "DELETE"
+        )
+    }
+
+    // MARK: - Update Issue Labels
+
+    func updateIssueLabels(
+        projectID: Int,
+        issueIID:  Int,
+        labels:    [String],
+        baseURL:   String,
+        token:     String
+    ) async throws -> GitLabIssue {
+        struct Body: Encodable { let labels: String }
+        return try await post(
+            "projects/\(projectID)/issues/\(issueIID)",
+            baseURL: baseURL,
+            token:   token,
+            body:    Body(labels: labels.joined(separator: ",")),
+            method:  "PUT"
+        )
+    }
+
     // MARK: - User
 
     func fetchCurrentUser(baseURL: String, token: String) async throws -> GitLabUser {
@@ -180,6 +267,30 @@ actor GitLabAPIService {
 
     func fetchUser(id: Int, baseURL: String, token: String) async throws -> GitLabUser {
         return try await request("users/\(id)", baseURL: baseURL, token: token)
+    }
+
+    // MARK: - Plan detection
+
+    private struct NamespaceResponse: Decodable {
+        let plan: String?
+    }
+
+    /// Attempts to detect the GitLab plan (free / premium / ultimate) from the
+    /// current user's personal namespace. Returns `.free` on any error or when
+    /// the `plan` field is absent (self-hosted instances without a licence).
+    func fetchCurrentPlan(baseURL: String, token: String) async throws -> GitLabPlan {
+        let namespaces: [NamespaceResponse] = (try? await request(
+            "namespaces",
+            baseURL: baseURL,
+            token:   token,
+            queryItems: [
+                URLQueryItem(name: "owned_only",    value: "true"),
+                URLQueryItem(name: "top_level_only", value: "true"),
+                URLQueryItem(name: "per_page",       value: "5")
+            ]
+        )) ?? []
+        guard let planString = namespaces.compactMap(\.plan).first else { return .free }
+        return GitLabPlan(rawString: planString)
     }
 
     // MARK: - Repositories
@@ -199,6 +310,24 @@ actor GitLabAPIService {
         ])
     }
 
+    /// Returns all GitLab groups the current user is a member of (any access level).
+    func fetchUserGroups(
+        baseURL: String,
+        token:   String
+    ) async throws -> [GitLabGroup] {
+        return try await request(
+            "groups",
+            baseURL: baseURL,
+            token:   token,
+            queryItems: [
+                URLQueryItem(name: "min_access_level", value: "10"),
+                URLQueryItem(name: "per_page",         value: "100"),
+                URLQueryItem(name: "order_by",         value: "name"),
+                URLQueryItem(name: "sort",             value: "asc")
+            ]
+        )
+    }
+
     func searchRepositories(
         query: String,
         baseURL: String,
@@ -212,19 +341,111 @@ actor GitLabAPIService {
         ])
     }
 
+    /// Browse all public GitLab groups sorted by the given field.
+    /// Universally-safe order_by values: "name", "path", "id".
+    /// "last_activity_at" / "created_at" require GitLab 14.6+ and return HTTP 400 on older instances.
+    /// This method automatically retries with "name" if the requested sort causes a 400.
+    func fetchPublicGroups(
+        orderBy: String = "name",
+        sortDirection: String = "desc",
+        baseURL: String,
+        token: String,
+        page: Int = 1,
+        perPage: Int = 25
+    ) async throws -> [GitLabGroup] {
+        let queryItems = { (ob: String) in [
+            URLQueryItem(name: "visibility", value: "public"),
+            URLQueryItem(name: "order_by",   value: ob),
+            URLQueryItem(name: "sort",       value: sortDirection),
+            URLQueryItem(name: "per_page",   value: "\(perPage)"),
+            URLQueryItem(name: "page",       value: "\(page)")
+        ]}
+        do {
+            return try await request("groups", baseURL: baseURL, token: token,
+                                     queryItems: queryItems(orderBy))
+        } catch APIError.httpError(400) where orderBy != "name" {
+            // Older GitLab instances reject unsupported order_by values with 400;
+            // fall back to the universally-supported "name" sort.
+            return try await request("groups", baseURL: baseURL, token: token,
+                                     queryItems: queryItems("name"))
+        }
+    }
+
+    /// Fetches a single GitLab group by ID. Used when navigating to a group
+    /// from a repository's namespace (which only carries the group ID).
+    func fetchGroup(id: Int, baseURL: String, token: String) async throws -> GitLabGroup {
+        return try await request("groups/\(id)", baseURL: baseURL, token: token)
+    }
+
+    /// Fetches a GitLab group by its full URL path (e.g. `"my-org"` or `"parent/subgroup"`).
+    /// The path segments are joined with `%2F` so the GitLab REST API receives a single
+    /// URL path component rather than multiple levels of nesting.
+    func fetchGroupByPath(_ path: String, baseURL: String, token: String) async throws -> GitLabGroup {
+        let encoded = path
+            .components(separatedBy: "/")
+            .map { $0.addingPercentEncoding(
+                withAllowedCharacters: CharacterSet.alphanumerics.union(.init(charactersIn: "-._~"))) ?? $0 }
+            .joined(separator: "%2F")
+        return try await request("groups/\(encoded)", baseURL: baseURL, token: token)
+    }
+
+    /// Returns members of a GitLab group (public or joined). Up to `perPage` returned.
+    /// Items whose JSON is missing required fields are silently dropped.
+    func fetchGroupMembers(
+        groupID: Int,
+        baseURL: String,
+        token:   String,
+        perPage: Int = 24
+    ) async throws -> [GitLabUser] {
+        let safe: [Safe<GitLabUser>] = try await request(
+            "groups/\(groupID)/members",
+            baseURL:    baseURL,
+            token:      token,
+            queryItems: [
+                URLQueryItem(name: "per_page", value: "\(perPage)")
+            ]
+        )
+        return safe.compactMap(\.value)
+    }
+
+    /// Returns public projects belonging to a group (and its subgroups).
+    /// Items whose JSON is missing required fields are silently dropped.
+    func fetchGroupProjects(
+        groupID: Int,
+        orderBy: String = "last_activity_at",
+        baseURL: String,
+        token: String,
+        page: Int = 1
+    ) async throws -> [Repository] {
+        let safe: [Safe<Repository>] = try await request(
+            "groups/\(groupID)/projects",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "include_subgroups", value: "true"),
+                URLQueryItem(name: "order_by",          value: orderBy),
+                URLQueryItem(name: "sort",              value: "desc"),
+                URLQueryItem(name: "per_page",          value: "25"),
+                URLQueryItem(name: "page",              value: "\(page)")
+            ]
+        )
+        return safe.compactMap(\.value)
+    }
+
     /// Browse all accessible GitLab projects sorted by the given field.
     /// Valid order_by values: "star_count", "last_activity_at", "created_at", "name", "id"
     func fetchExploreProjects(
         orderBy: String = "star_count",
+        sortDirection: String = "desc",
         baseURL: String,
         token: String,
         page: Int = 1
     ) async throws -> [Repository] {
         return try await request("projects", baseURL: baseURL, token: token, queryItems: [
             URLQueryItem(name: "order_by", value: orderBy),
-            URLQueryItem(name: "sort", value: "desc"),
+            URLQueryItem(name: "sort",     value: sortDirection),
             URLQueryItem(name: "per_page", value: "25"),
-            URLQueryItem(name: "page", value: "\(page)")
+            URLQueryItem(name: "page",     value: "\(page)")
         ])
     }
 
@@ -250,6 +471,32 @@ actor GitLabAPIService {
         // The old DELETE /projects/:id/star was a v3 endpoint and returns 404 on modern instances.
         try await voidPost("projects/\(projectID)/unstar", baseURL: baseURL, token: token,
                            extraSuccessCodes: [304])
+    }
+
+    /// Fetches a project by its full namespace path (e.g. `"namespace/repo"`).
+    /// Each path segment is percent-encoded individually and joined with `%2F` so
+    /// the GitLab REST API treats the whole string as a single project identifier.
+    /// Mirrors the retry-without-statistics logic of `fetchRepository(projectID:)`.
+    func fetchProjectByPath(_ path: String, baseURL: String, token: String) async throws -> Repository {
+        let encoded = path
+            .components(separatedBy: "/")
+            .map { $0.addingPercentEncoding(
+                withAllowedCharacters: CharacterSet.alphanumerics.union(.init(charactersIn: "-._~"))) ?? $0 }
+            .joined(separator: "%2F")
+        var lastError: Error = APIError.invalidResponse
+        for attempt in 1...3 {
+            let withStats = attempt == 1
+            let queryItems = withStats ? [URLQueryItem(name: "statistics", value: "true")] : []
+            do {
+                return try await request("projects/\(encoded)", baseURL: baseURL, token: token,
+                                         queryItems: queryItems)
+            } catch APIError.httpError(403) {
+                lastError = APIError.httpError(403)
+            } catch {
+                throw error
+            }
+        }
+        throw lastError
     }
 
     func fetchRepository(projectID: Int, baseURL: String, token: String) async throws -> Repository {
@@ -373,6 +620,59 @@ actor GitLabAPIService {
 
     /// Fetches the most recent pipeline for a given ref (branch/tag).
     /// Returns nil when the project has no pipelines or the ref has never been built.
+    /// Returns full metadata for a single pipeline (duration, user, source, SHA, timestamps).
+    func fetchPipelineDetail(
+        projectID:  Int,
+        pipelineID: Int,
+        baseURL:    String,
+        token:      String
+    ) async throws -> PipelineDetail {
+        return try await request(
+            "projects/\(projectID)/pipelines/\(pipelineID)",
+            baseURL: baseURL,
+            token:   token
+        )
+    }
+
+    /// Returns all jobs for a given pipeline, sorted by their natural stage order.
+    func fetchPipelineJobs(
+        projectID:  Int,
+        pipelineID: Int,
+        baseURL:    String,
+        token:      String
+    ) async throws -> [PipelineJob] {
+        return try await request(
+            "projects/\(projectID)/pipelines/\(pipelineID)/jobs",
+            baseURL:    baseURL,
+            token:      token,
+            queryItems: [URLQueryItem(name: "per_page", value: "100")]
+        )
+    }
+
+    /// Fetches the raw trace log for a single CI job.
+    /// Throws `APIError.httpError(403)` when the caller lacks log-read permission.
+    func fetchJobLog(
+        projectID: Int,
+        jobID:     Int,
+        baseURL:   String,
+        token:     String
+    ) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/api/v4/projects/\(projectID)/jobs/\(jobID)/trace")
+        else { throw APIError.invalidURL }
+
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else { throw APIError.httpError(http.statusCode) }
+
+        // GitLab returns the trace as plain UTF-8 text; fall back to Latin-1 if needed.
+        return String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .isoLatin1)
+            ?? ""
+    }
+
     func fetchLatestPipeline(
         projectID: Int,
         ref: String,
@@ -391,6 +691,29 @@ actor GitLabAPIService {
             ]
         )
         return pipelines.first
+    }
+
+    /// Returns a page of pipelines for a project, newest first.
+    func fetchProjectPipelines(
+        projectID: Int,
+        baseURL: String,
+        token: String,
+        ref: String? = nil,
+        page: Int = 1
+    ) async throws -> [Pipeline] {
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "per_page", value: "50"),
+            URLQueryItem(name: "page",     value: "\(page)"),
+            URLQueryItem(name: "order_by", value: "id"),
+            URLQueryItem(name: "sort",     value: "desc")
+        ]
+        if let ref { items.append(URLQueryItem(name: "ref", value: ref)) }
+        return try await request(
+            "projects/\(projectID)/pipelines",
+            baseURL: baseURL,
+            token: token,
+            queryItems: items
+        )
     }
 
     /// Search a project for an issue by title (all states). Used when target_iid is
@@ -426,11 +749,12 @@ actor GitLabAPIService {
             baseURL: baseURL,
             token: token,
             queryItems: [
-                URLQueryItem(name: "state",    value: state),
-                URLQueryItem(name: "per_page", value: "20"),
-                URLQueryItem(name: "page",     value: "\(page)"),
-                URLQueryItem(name: "order_by", value: "updated_at"),
-                URLQueryItem(name: "sort",     value: "desc")
+                URLQueryItem(name: "state",               value: state),
+                URLQueryItem(name: "per_page",            value: "20"),
+                URLQueryItem(name: "page",                value: "\(page)"),
+                URLQueryItem(name: "order_by",            value: "updated_at"),
+                URLQueryItem(name: "sort",                value: "desc"),
+                URLQueryItem(name: "with_labels_details", value: "true")
             ]
         )
     }
@@ -450,6 +774,52 @@ actor GitLabAPIService {
                 URLQueryItem(name: "order_by", value: "created_at"),
                 URLQueryItem(name: "sort",     value: "asc")
             ]
+        )
+    }
+
+    /// Fetches issues linked to a given issue and filters to task-type only.
+    /// GitLab returns child work-item tasks in this endpoint alongside regular
+    /// related issues; filtering by `issue_type == "task"` isolates them.
+    func fetchIssueLinkedTasks(
+        projectID: Int,
+        issueIID:  Int,
+        baseURL:   String,
+        token:     String
+    ) async throws -> [GitLabIssue] {
+        let linked: [GitLabIssue] = try await request(
+            "projects/\(projectID)/issues/\(issueIID)/links",
+            baseURL: baseURL,
+            token:   token
+        )
+        return linked.filter { $0.issueType == "task" }
+    }
+
+    private struct IssueLinkBody: Encodable {
+        let targetProjectId: Int
+        let targetIssueIid:  Int
+        enum CodingKeys: String, CodingKey {
+            case targetProjectId = "target_project_id"
+            case targetIssueIid  = "target_issue_iid"
+        }
+    }
+    // Minimal decodable — the API returns source/target issue objects we don't need here.
+    private struct IssueLinkCreatedResponse: Decodable {}
+
+    /// Links `targetIssueIID` to `issueIID` as a "relates to" relationship.
+    func createIssueLink(
+        projectID:       Int,
+        issueIID:        Int,
+        targetProjectID: Int,
+        targetIssueIID:  Int,
+        baseURL:         String,
+        token:           String
+    ) async throws {
+        let body = IssueLinkBody(targetProjectId: targetProjectID, targetIssueIid: targetIssueIID)
+        let _: IssueLinkCreatedResponse = try await post(
+            "projects/\(projectID)/issues/\(issueIID)/links",
+            baseURL: baseURL,
+            token:   token,
+            body:    body
         )
     }
 
@@ -494,14 +864,144 @@ actor GitLabAPIService {
         )
     }
 
+    // MARK: - Create Issue
+
+    private struct CreateIssueBody: Encodable {
+        let title:       String
+        let description: String?
+        let assigneeIds: [Int]
+        let labels:      String
+        let issueType:   String
+
+        enum CodingKeys: String, CodingKey {
+            case title, description, labels
+            case assigneeIds = "assignee_ids"
+            case issueType   = "issue_type"
+        }
+    }
+
+    func createIssue(
+        projectID:   Int,
+        title:       String,
+        description: String?,
+        assigneeIDs: [Int],
+        labels:      [String],
+        issueType:   String = "issue",
+        baseURL:     String,
+        token:       String
+    ) async throws -> GitLabIssue {
+        let body = CreateIssueBody(
+            title:       title,
+            description: description,
+            assigneeIds: assigneeIDs,
+            labels:      labels.joined(separator: ","),
+            issueType:   issueType
+        )
+        return try await post(
+            "projects/\(projectID)/issues",
+            baseURL: baseURL,
+            token:   token,
+            body:    body
+        )
+    }
+
+    private struct UpdateIssueDescriptionBody: Encodable {
+        let description: String
+    }
+
+    func updateIssueDescription(
+        projectID:   Int,
+        issueIID:    Int,
+        description: String,
+        baseURL:     String,
+        token:       String
+    ) async throws -> GitLabIssue {
+        return try await post(
+            "projects/\(projectID)/issues/\(issueIID)",
+            baseURL:  baseURL,
+            token:    token,
+            body:     UpdateIssueDescriptionBody(description: description),
+            method:   "PUT"
+        )
+    }
+
+    private struct CreateLabelBody: Encodable {
+        let name:  String
+        let color: String
+    }
+
+    /// Creates a new label in the project and returns it.
+    /// `color` must be a hex string (e.g. "#D9534F").
+    @discardableResult
+    func createProjectLabel(
+        projectID: Int,
+        name:      String,
+        color:     String,
+        baseURL:   String,
+        token:     String
+    ) async throws -> ProjectLabel {
+        return try await post(
+            "projects/\(projectID)/labels",
+            baseURL: baseURL,
+            token:   token,
+            body:    CreateLabelBody(name: name, color: color)
+        )
+    }
+
+    func fetchProjectLabels(
+        projectID: Int,
+        baseURL:   String,
+        token:     String
+    ) async throws -> [ProjectLabel] {
+        return try await request(
+            "projects/\(projectID)/labels",
+            baseURL: baseURL,
+            token:   token,
+            queryItems: [URLQueryItem(name: "per_page", value: "100")]
+        )
+    }
+
+    func fetchProjectMembers(
+        projectID: Int,
+        baseURL:   String,
+        token:     String
+    ) async throws -> [ProjectMemberInfo] {
+        return try await request(
+            "projects/\(projectID)/members/all",
+            baseURL: baseURL,
+            token:   token,
+            queryItems: [URLQueryItem(name: "per_page", value: "100")]
+        )
+    }
+
     // MARK: - Follow
 
     private struct EmptyBody: Encodable {}
 
     func fetchUserProjects(userID: Int, baseURL: String, token: String) async throws -> [Repository] {
         return try await request("users/\(userID)/projects", baseURL: baseURL, token: token, queryItems: [
-            URLQueryItem(name: "per_page", value: "10")
+            URLQueryItem(name: "per_page",   value: "100"),
+            URLQueryItem(name: "order_by",   value: "last_activity_at"),
+            URLQueryItem(name: "sort",       value: "desc"),
+            URLQueryItem(name: "statistics", value: "true")
         ])
+    }
+
+    /// Returns the public/internal groups a user is a member of.
+    /// Uses GET /users/:user_id/groups (GitLab 15.1+).
+    /// Non-throwing — returns an empty array if the server refuses access or
+    /// the endpoint is unavailable on an older self-managed instance.
+    func fetchUserGroupMemberships(userID: Int, baseURL: String, token: String) async -> [GitLabGroup] {
+        return (try? await request(
+            "users/\(userID)/groups",
+            baseURL:    baseURL,
+            token:      token,
+            queryItems: [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "order_by", value: "name"),
+                URLQueryItem(name: "sort",     value: "asc")
+            ]
+        )) ?? []
     }
 
     @discardableResult
@@ -516,8 +1016,8 @@ actor GitLabAPIService {
 
     func searchUsers(query: String, baseURL: String, token: String) async throws -> [GitLabUser] {
         return try await request("users", baseURL: baseURL, token: token, queryItems: [
-            URLQueryItem(name: "search", value: query),
-            URLQueryItem(name: "per_page", value: "5")
+            URLQueryItem(name: "search",   value: query),
+            URLQueryItem(name: "per_page", value: "10")
         ])
     }
 
@@ -601,6 +1101,30 @@ actor GitLabAPIService {
         )
     }
 
+    /// Fetches the cryptographic signature for a single commit.
+    ///
+    /// GitLab supports PGP, X.509, and SSH signatures.  Returns `nil` when the
+    /// commit has no signature or the project does not expose signature data
+    /// (HTTP 404).  All other errors are rethrown so the caller can decide
+    /// whether to surface them to the user.
+    func fetchCommitSignature(
+        projectID: Int,
+        sha: String,
+        baseURL: String,
+        token: String
+    ) async throws -> CommitSignature? {
+        do {
+            return try await request(
+                "projects/\(projectID)/repository/commits/\(sha)/signature",
+                baseURL: baseURL,
+                token: token
+            )
+        } catch APIError.httpError(404) {
+            // 404 means the commit is unsigned — treat as nil, not an error.
+            return nil
+        }
+    }
+
     // MARK: - Merge Requests
 
     func fetchMergeRequests(
@@ -619,7 +1143,7 @@ actor GitLabAPIService {
                 URLQueryItem(name: "per_page", value: "20"),
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "order_by", value: "updated_at"),
-                URLQueryItem(name: "with_labels_details", value: "false")
+                URLQueryItem(name: "with_labels_details", value: "true")
             ]
         )
     }
@@ -761,6 +1285,21 @@ actor GitLabAPIService {
         )
     }
 
+    /// Returns all pipelines triggered for a given merge request, newest first.
+    func fetchMRPipelines(
+        projectID: Int,
+        mrIID: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> [Pipeline] {
+        return try await request(
+            "projects/\(projectID)/merge_requests/\(mrIID)/pipelines",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [URLQueryItem(name: "per_page", value: "20")]
+        )
+    }
+
     // MARK: - Project Notification Level (Watch)
 
     /// Returns the authenticated user's notification level for the given project.
@@ -854,12 +1393,13 @@ actor GitLabAPIService {
             baseURL: baseURL,
             token: token,
             queryItems: [
-                URLQueryItem(name: "assignee_id", value: "\(userID)"),
-                URLQueryItem(name: "state",       value: "opened"),
-                URLQueryItem(name: "per_page",    value: "50"),
-                URLQueryItem(name: "page",        value: "\(page)"),
-                URLQueryItem(name: "order_by",    value: "updated_at"),
-                URLQueryItem(name: "sort",        value: "desc")
+                URLQueryItem(name: "assignee_id",         value: "\(userID)"),
+                URLQueryItem(name: "state",               value: "opened"),
+                URLQueryItem(name: "per_page",            value: "50"),
+                URLQueryItem(name: "page",                value: "\(page)"),
+                URLQueryItem(name: "order_by",            value: "updated_at"),
+                URLQueryItem(name: "sort",                value: "desc"),
+                URLQueryItem(name: "with_labels_details", value: "true")
             ]
         )
     }
@@ -878,12 +1418,36 @@ actor GitLabAPIService {
             baseURL: baseURL,
             token: token,
             queryItems: [
-                URLQueryItem(name: "reviewer_id", value: "\(userID)"),
-                URLQueryItem(name: "state",       value: "opened"),
-                URLQueryItem(name: "per_page",    value: "50"),
-                URLQueryItem(name: "page",        value: "\(page)"),
-                URLQueryItem(name: "order_by",    value: "updated_at"),
-                URLQueryItem(name: "sort",        value: "desc")
+                URLQueryItem(name: "reviewer_id",         value: "\(userID)"),
+                URLQueryItem(name: "state",               value: "opened"),
+                URLQueryItem(name: "per_page",            value: "50"),
+                URLQueryItem(name: "page",                value: "\(page)"),
+                URLQueryItem(name: "order_by",            value: "updated_at"),
+                URLQueryItem(name: "sort",                value: "desc"),
+                URLQueryItem(name: "with_labels_details", value: "true")
+            ]
+        )
+    }
+
+    /// Fetches open task-type issues assigned to the specified user globally.
+    /// Used to populate the Tasks inbox section with issues the user didn't author.
+    func fetchAssignedTaskIssues(
+        userID: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> [GitLabIssue] {
+        return try await request(
+            "issues",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "assignee_id",         value: "\(userID)"),
+                URLQueryItem(name: "issue_type",          value: "task"),
+                URLQueryItem(name: "state",               value: "opened"),
+                URLQueryItem(name: "per_page",            value: "50"),
+                URLQueryItem(name: "order_by",            value: "updated_at"),
+                URLQueryItem(name: "sort",                value: "desc"),
+                URLQueryItem(name: "with_labels_details", value: "true")
             ]
         )
     }
@@ -902,12 +1466,13 @@ actor GitLabAPIService {
             baseURL: baseURL,
             token: token,
             queryItems: [
-                URLQueryItem(name: "author_id", value: "\(userID)"),
-                URLQueryItem(name: "state",     value: "opened"),
-                URLQueryItem(name: "per_page",  value: "50"),
-                URLQueryItem(name: "page",      value: "\(page)"),
-                URLQueryItem(name: "order_by",  value: "updated_at"),
-                URLQueryItem(name: "sort",      value: "desc")
+                URLQueryItem(name: "author_id",           value: "\(userID)"),
+                URLQueryItem(name: "state",               value: "opened"),
+                URLQueryItem(name: "per_page",            value: "50"),
+                URLQueryItem(name: "page",                value: "\(page)"),
+                URLQueryItem(name: "order_by",            value: "updated_at"),
+                URLQueryItem(name: "sort",                value: "desc"),
+                URLQueryItem(name: "with_labels_details", value: "true")
             ]
         )
     }
@@ -920,19 +1485,50 @@ actor GitLabAPIService {
         token: String,
         after: Date? = nil
     ) async throws -> [ContributionEvent] {
-        var items: [URLQueryItem] = [
-            URLQueryItem(name: "per_page", value: "100")
-        ]
-        if let after {
-            let formatter = ISO8601DateFormatter()
-            items.append(URLQueryItem(name: "after", value: formatter.string(from: after)))
+        // GitLab's `after` param expects a plain date string ("YYYY-MM-DD"), not a
+        // full ISO-8601 datetime.  Using ISO8601DateFormatter's default output
+        // (e.g. "2025-04-08T00:00:00Z") causes the API to silently ignore the
+        // filter and return unrelated events.
+        let afterString: String? = after.map { date in
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy-MM-dd"
+            fmt.locale     = Locale(identifier: "en_US_POSIX")
+            fmt.timeZone   = TimeZone(abbreviation: "UTC")
+            return fmt.string(from: date)
         }
-        return try await request(
-            "users/\(username)/events",
-            baseURL: baseURL,
-            token: token,
-            queryItems: items
-        )
+
+        // GitLab caps results at 100 per page; paginate until we get a partial
+        // page (meaning there are no more events) or hit a 5 000-event safety cap
+        // to prevent runaway network usage for extremely active accounts.
+        let perPage   = 100
+        let maxEvents = 5_000
+        var allEvents: [ContributionEvent] = []
+        var page      = 1
+
+        while allEvents.count < maxEvents {
+            var items: [URLQueryItem] = [
+                URLQueryItem(name: "per_page", value: "\(perPage)"),
+                URLQueryItem(name: "page",     value: "\(page)")
+            ]
+            if let afterString {
+                items.append(URLQueryItem(name: "after", value: afterString))
+            }
+
+            let batch: [ContributionEvent] = try await request(
+                "users/\(username)/events",
+                baseURL: baseURL,
+                token: token,
+                queryItems: items
+            )
+
+            allEvents.append(contentsOf: batch)
+
+            // A partial page means we've reached the last page.
+            if batch.count < perPage { break }
+            page += 1
+        }
+
+        return allEvents
     }
 
     // MARK: - Activity Feed
@@ -943,17 +1539,20 @@ actor GitLabAPIService {
         projectID: Int,
         baseURL: String,
         token: String,
+        after: String? = nil,   // ISO date string "YYYY-MM-DD" — only return events after this date
         page: Int = 1
     ) async throws -> [ActivityEvent] {
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "per_page", value: "50"),
+            URLQueryItem(name: "page",     value: "\(page)"),
+            URLQueryItem(name: "sort",     value: "desc")
+        ]
+        if let after { queryItems.append(URLQueryItem(name: "after", value: after)) }
         return try await request(
             "projects/\(projectID)/events",
             baseURL: baseURL,
             token: token,
-            queryItems: [
-                URLQueryItem(name: "per_page", value: "50"),
-                URLQueryItem(name: "page",     value: "\(page)"),
-                URLQueryItem(name: "sort",     value: "desc")
-            ]
+            queryItems: queryItems
         )
     }
 
@@ -1128,6 +1727,194 @@ actor GitLabAPIService {
         )
     }
 
+    /// Searches for projects whose name, path, description, **or namespace name/path**
+    /// matches `query`.  `search_namespaces=true` is essential so that queries like
+    /// "stoicswe-projects" match the group prefix of `stoicswe-projects/Grit`, not just
+    /// a project whose own name or path happens to contain that string.
+    func searchProjects(
+        query: String,
+        baseURL: String,
+        token: String
+    ) async throws -> [Repository] {
+        return try await request(
+            "projects",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "search",            value: query),
+                URLQueryItem(name: "search_namespaces", value: "true"),
+                URLQueryItem(name: "order_by",          value: "last_activity_at"),
+                URLQueryItem(name: "per_page",          value: "20"),
+                URLQueryItem(name: "statistics",        value: "true")
+            ]
+        )
+    }
+
+    /// Searches for projects the authenticated user is a **member of** whose name,
+    /// path, description, or namespace matches `query`.
+    ///
+    /// On large instances (e.g. GitLab.com) a common project name like "Grit" may match
+    /// thousands of public repos, pushing the user's own private project off the first
+    /// page.  Running this in parallel with `searchProjects` and merging results ensures
+    /// the user's own repos always appear even when the global list is dominated by
+    /// popular public projects with similar names.
+    func searchMemberProjects(
+        query: String,
+        baseURL: String,
+        token: String
+    ) async throws -> [Repository] {
+        return try await request(
+            "projects",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "search",            value: query),
+                URLQueryItem(name: "search_namespaces", value: "true"),
+                URLQueryItem(name: "membership",        value: "true"),
+                URLQueryItem(name: "order_by",          value: "last_activity_at"),
+                URLQueryItem(name: "per_page",          value: "20"),
+                URLQueryItem(name: "statistics",        value: "true")
+            ]
+        )
+    }
+
+    /// Returns projects whose topics (tags) include `topic`.
+    func searchRepositoriesByTopic(
+        topic: String,
+        baseURL: String,
+        token: String
+    ) async throws -> [Repository] {
+        return try await request(
+            "projects",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "topic",      value: topic),
+                URLQueryItem(name: "order_by",   value: "star_count"),
+                URLQueryItem(name: "per_page",   value: "15"),
+                URLQueryItem(name: "statistics", value: "true")
+            ]
+        )
+    }
+
+    /// Searches for groups whose name or path matches `query`.
+    ///
+    /// `all_available=true` is required so that the endpoint returns all visible/public
+    /// groups, not just the ones the current user already belongs to (the default).
+    /// Without this, searching for a group like "stoicswe-projects" returns nothing
+    /// unless the authenticated user is already a member.
+    func searchGroups(
+        query: String,
+        baseURL: String,
+        token: String
+    ) async throws -> [GitLabGroup] {
+        return try await request(
+            "groups",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "search",        value: query),
+                URLQueryItem(name: "all_available", value: "true"),
+                URLQueryItem(name: "per_page",      value: "10"),
+                URLQueryItem(name: "order_by",      value: "name"),
+                URLQueryItem(name: "sort",          value: "asc")
+            ]
+        )
+    }
+
+    /// Global file-blob search across all accessible projects.
+    func searchBlobsGlobal(
+        query: String,
+        baseURL: String,
+        token: String
+    ) async throws -> [SearchBlob] {
+        return try await request(
+            "search",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "scope",    value: "blobs"),
+                URLQueryItem(name: "search",   value: query),
+                URLQueryItem(name: "per_page", value: "15")
+            ]
+        )
+    }
+
+    /// Global commit search across all accessible projects.
+    /// Results include `project_id` so they can be navigated to.
+    func searchCommitsGlobal(
+        query: String,
+        baseURL: String,
+        token: String
+    ) async throws -> [Commit] {
+        return try await request(
+            "search",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "scope",    value: "commits"),
+                URLQueryItem(name: "search",   value: query),
+                URLQueryItem(name: "per_page", value: "10")
+            ]
+        )
+    }
+
+    /// Global merge-request search across all accessible projects.
+    func searchMergeRequestsGlobal(
+        query: String,
+        baseURL: String,
+        token: String
+    ) async throws -> [MergeRequest] {
+        return try await request(
+            "search",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "scope",    value: "merge_requests"),
+                URLQueryItem(name: "search",   value: query),
+                URLQueryItem(name: "per_page", value: "10")
+            ]
+        )
+    }
+
+    /// Searches commits within a specific project.
+    func searchRepoCommits(
+        projectID: Int,
+        query: String,
+        baseURL: String,
+        token: String
+    ) async throws -> [Commit] {
+        return try await request(
+            "projects/\(projectID)/search",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "scope",    value: "commits"),
+                URLQueryItem(name: "search",   value: query),
+                URLQueryItem(name: "per_page", value: "15")
+            ]
+        )
+    }
+
+    /// Searches merge requests within a specific project.
+    func searchRepoMergeRequests(
+        projectID: Int,
+        query: String,
+        baseURL: String,
+        token: String
+    ) async throws -> [MergeRequest] {
+        return try await request(
+            "projects/\(projectID)/search",
+            baseURL: baseURL,
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "scope",    value: "merge_requests"),
+                URLQueryItem(name: "search",   value: query),
+                URLQueryItem(name: "per_page", value: "15")
+            ]
+        )
+    }
+
     func searchRepository(
         projectID: Int,
         query: String,
@@ -1156,9 +1943,15 @@ actor GitLabAPIService {
 
         var errorDescription: String? {
             switch self {
-            case .invalidURL: return "Invalid URL"
-            case .invalidResponse: return "Invalid response from server"
-            case .httpError(let code): return "Server returned HTTP \(code)"
+            case .invalidURL:
+                return String(localized: "Invalid URL",
+                              comment: "API error: the constructed request URL is invalid")
+            case .invalidResponse:
+                return String(localized: "Invalid response from server",
+                              comment: "API error: the server returned a response that could not be interpreted")
+            case .httpError(let code):
+                return String(localized: "Server returned HTTP \(code)",
+                              comment: "API error: the server returned an unexpected HTTP status code")
             }
         }
     }

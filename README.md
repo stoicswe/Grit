@@ -1,2 +1,181 @@
+![Xcode Cloud](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/stoicswe/8fc6bd69237f5d505ced66c91f95dc14/raw/grit-build.json)
+
 # Grit
-A simple gitlab client
+
+A native iOS GitLab client built with SwiftUI. Grit aims to provide a way to browse repositories, review merge requests, track pipelines, and monitor your GitLab workflow from an iPhone. Issues can be created and commented on as well, bringing together a collective set of management features to help in a pinch for when you're out and about.
+
+---
+
+## Features
+Just some of the features of this application, with more to come as the project matures.
+
+### Repositories
+- Browse all your personal and group repositories with group filtering and three sort orders (Recently Edited, Alphabetical, Newest First)
+- Star / unstar repositories directly from the list or detail view
+- Switch branches and view the default-branch pipeline status at a glance
+- Copy clone URLs, open repos in Safari, or jump to group namespaces
+
+### File Browser
+- Navigate directory trees and view file contents with syntax-aware display
+
+### Commits
+- Full commit history per branch with author, timestamp, and short message
+- Commit detail view with unified diff and metadata
+
+### Branches
+- List all branches; protected and default branches are visually distinguished
+- Navigate directly into a branch detail view to observe commit history for commits
+
+### Merge Requests
+- Embedded MR list inside the repository detail view, plus a standalone sheet
+- MR detail with description, labels, assignees, and milestone
+- **Pipeline browser** — all pipelines triggered for the MR, each tappable to open a full pipeline detail sheet
+
+### Pipelines & CI/CD
+- Per-job status with stage grouping
+- Live status badges (Passed, Failed, Running, Pending, Canceled, etc.)
+- Pipeline source labels (Push, Schedule, API, Web IDE, DAST Scan, etc.)
+- Background polling refreshes pipeline status while the view is open
+
+---
+
+## Join the Test Flight!
+
+The public test flight for this app can be joined at this link: https://testflight.apple.com/join/4VWmabkT
+
+
+## Architecture
+Grit follows **MVVM** with a unidirectional data flow:
+
+```
+Views  ──▶  ViewModels  ──▶  Services  ──▶  GitLab API / Cache
+  ▲               │
+  └───────────────┘  (@Published / ObservableObject)
+```
+
+### Directory Structure
+
+```
+Grit/
+├── App/
+│   ├── GritApp.swift                  # @main entry point, background task registration
+│   └── AppNavigationState.swift       # Global navigation state (current repo, branch)
+├── Models/
+│   ├── Repository.swift
+│   └── ...
+├── ViewModels/
+│   ├── RepositoryViewModel.swift      # List VM + Detail VM
+│   └── ...
+├── Views/
+│   ├── Repositories/
+│   ├── Files/
+│   ├── Commits/
+│   ├── Branches/
+│   ├── MergeRequests/
+│   ├── Pipelines/
+│   ├── Issues/
+│   ├── Forks/
+│   ├── Search/
+│   ├── Settings/
+│   └── Components/
+├── Services/
+└── Resources/
+```
+
+## Requirements
+
+| Requirement | Version |
+|---|---|
+| iOS | 26.0+ |
+| Xcode | 16.3+ |
+| XcodeGen | 2.x (`brew install xcodegen`) |
+| GitLab | Any self-hosted or GitLab.com instance with API v4 |
+
+---
+
+## Getting Started
+
+### 1. Clone
+
+```bash
+git clone https://gitlab.com/stoicswe/grit.git
+cd grit
+```
+
+### 2. Generate the Xcode project
+
+```bash
+xcodegen generate
+```
+
+### 3. Open in Xcode
+
+```bash
+open Grit.xcodeproj
+```
+
+### 4. Configure signing
+
+In Xcode, select the **Grit** target → **Signing & Capabilities** → set your Team and Bundle Identifier.
+
+### 5. Configure GitLab OAuth
+
+1. In your GitLab instance go to **User Settings → Applications**.
+2. Create a new application with the redirect URI `grit://oauth/callback`.
+3. Grant scopes: `read_api`, `read_user`, `read_repository`.
+4. Copy the Application ID and Secret.
+5. Add them to `Grit/Resources/Config.xcconfig` (or the appropriate secrets file in your setup).
+
+### 6. Build and run
+
+Select a simulator or device and press **⌘R**.
+
+---
+
+## Localisation
+
+Grit uses the **Xcode 15+ String Catalog** approach (`Localizable.xcstrings`):
+
+- SwiftUI `Text("literal")` calls are automatically localised — no code changes needed.
+- Non-UI strings (model labels, error descriptions) use `String(localized: "…", comment: "…")`.
+- `SWIFT_EMIT_LOC_STRINGS = YES` is set in the build configuration; the Swift compiler extracts all localisable strings into the catalog automatically on each build.
+- To add a new language: open `Localizable.xcstrings` in Xcode, click **+**, select the language, and provide translations — no code changes required.
+
+Currently ships with English. The infrastructure is fully ready for additional languages.
+
+---
+
+## Contributing
+
+1. Fork the repository on GitLab.
+2. Create a feature branch: `git checkout -b feature/my-feature`.
+3. Commit your changes following the existing code style.
+4. Open a Merge Request against `main`.
+
+Note: There are multiple Swift format checks made against the PRs in this repository. Please make note of suggested changes and warnings generated by the tooling to ensure that we can keep the source code maintainable.
+
+Please ensure:
+- New UI strings use `String(localized:comment:)` or `Text("literal")` (not string variables).
+- New API calls are added to `GitLabAPIService` and are `async throws`.
+- New model types conform to `Codable` and `Identifiable`.
+- Cache keys for new data types are added to `RepoCacheStore.CacheKey`.
+
+---
+
+## License
+
+This project uses a dual-license model:
+
+| Component | License | File |
+|---|---|---|
+| Source code (Swift, logic, services) | MIT | [LICENSE](LICENSE) |
+| App & UI design (visual design, assets, UI components) | Apache 2.0 | [APP_LICENSE](APP_LICENSE) |
+
+In short: you can freely use and build on the code under MIT terms, but the app's visual design and UI are covered by Apache 2.0, which requires attribution when redistributed.
+
+---
+
+## Author
+_Original Author:_ **Nathaniel Knudsen** ([@stoicswe](https://gitlab.com/stoicswe))
+
+For additional authors, please look at the list of contributors that GitLab generates.
