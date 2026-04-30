@@ -17,6 +17,9 @@ struct Repository: Codable, Identifiable, Hashable {
     let namespace: Namespace?
     let statistics: Statistics?
     let archived: Bool?
+    /// Project topics / tags (e.g. ["swift", "ios"]).  Nil when the API
+    /// response doesn't include the field (older endpoints, caches, etc.).
+    let topics: [String]?
     /// ISO 8601 date string (e.g. "2024-05-15") set when the project is queued for deletion.
     /// Stored as a raw String because GitLab returns a date-only value that the shared
     /// ISO 8601 datetime decoder would reject.
@@ -77,6 +80,7 @@ struct Repository: Codable, Identifiable, Hashable {
         case createdAt      = "created_at"
         case lastActivityAt = "last_activity_at"
         case markedForDeletionAt = "marked_for_deletion_at"
+        case topics
     }
 
     static func == (lhs: Repository, rhs: Repository) -> Bool {

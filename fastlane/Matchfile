@@ -1,0 +1,3 @@
+git_url("https://oauth2:#{ENV["MATCH_TOKEN"]}@gitlab.com/stoicswe/grit-match-certs.git")
+app_identifier("com.stoicswe.grit.app")
+type("appstore")

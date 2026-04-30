@@ -1,6 +1,6 @@
 import Foundation
 
-struct GitLabUser: Codable, Identifiable, Equatable {
+struct GitLabUser: Codable, Identifiable, Equatable, Hashable {
     let id: Int
     let username: String
     let name: String
@@ -24,6 +24,8 @@ struct GitLabUser: Codable, Identifiable, Equatable {
     let skype: String?
     let discord: String?
     let bluesky: String?
+
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
     enum CodingKeys: String, CodingKey {
         case id, username, name, email, bio, location, state, followers, following

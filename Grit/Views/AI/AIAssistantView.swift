@@ -140,8 +140,8 @@ struct AIFloatingPanel: View {
                 .lineLimit(1)
                 .foregroundStyle(.secondary)
             Spacer()
-            if navState.currentScreenContent != nil {
-                Image(systemName: "doc.text.fill")
+            if navState.currentScreenContent != nil || navState.hasRepositoryAIContext {
+                Image(systemName: navState.currentScreenContent != nil ? "doc.text.fill" : "book.fill")
                     .font(.system(size: 11))
                     .foregroundStyle(Color.accentColor.opacity(0.8))
             }
@@ -246,30 +246,7 @@ struct AIFloatingPanel: View {
     }
 
     private func buildInstruction(for question: String) -> String {
-        var parts: [String] = []
-
-        // Navigation context
-        if let repo = navState.currentRepository {
-            parts.append("Repository: \(repo.nameWithNamespace) (\(repo.visibility))")
-            if let branch = navState.currentBranch {
-                parts.append("Branch: \(branch)")
-            }
-        }
-        if let path = navState.currentFilePath {
-            parts.append("File path: \(path)")
-        }
-
-        // Actual screen content — the most valuable context
-        if let content = navState.currentScreenContent, !content.isEmpty {
-            // Limit to first 3000 chars to stay within token budget
-            let truncated = content.count > 3000
-                ? String(content.prefix(3000)) + "\n…[truncated]"
-                : content
-            parts.append("Current file contents:\n```\n\(truncated)\n```")
-        }
-
-        parts.append("User question: \(question)")
-        return parts.joined(separator: "\n\n")
+        navState.buildAIInstruction(for: question)
     }
 }
 
@@ -407,20 +384,7 @@ struct AIAssistantChatView: View {
     }
 
     private func buildInstruction(for question: String) -> String {
-        var parts: [String] = []
-        if let path = navState.currentFilePath { parts.append("File: \(path)") }
-        if let repo = navState.currentRepository {
-            parts.append("Repository: \(repo.nameWithNamespace) (\(repo.visibility))")
-            if let branch = navState.currentBranch { parts.append("Branch: \(branch)") }
-        }
-        if let content = navState.currentScreenContent, !content.isEmpty {
-            let truncated = content.count > 3000
-                ? String(content.prefix(3000)) + "\n…[truncated]"
-                : content
-            parts.append("File contents:\n```\n\(truncated)\n```")
-        }
-        parts.append("Question: \(question)")
-        return parts.joined(separator: "\n")
+        navState.buildAIInstruction(for: question)
     }
 }
 
@@ -428,6 +392,8 @@ struct AIAssistantChatView: View {
 
 struct UserBubble: View {
     let text: String
+    @ObservedObject private var settingsStore = SettingsStore.shared
+
     var body: some View {
         HStack {
             Spacer(minLength: 60)
@@ -436,7 +402,14 @@ struct UserBubble: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .background(settingsStore.accentColor ?? Color.accentColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(
+                            (settingsStore.accentColor ?? Color.accentColor).opacity(0.55),
+                            lineWidth: 1
+                        )
+                )
         }
     }
 }
@@ -474,7 +447,14 @@ struct AssistantBubble: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(.white.opacity(0.1), lineWidth: 0.5)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [Color.accentColor.opacity(0.55), Color.purple.opacity(0.35)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
             )
             Spacer(minLength: 60)
         }

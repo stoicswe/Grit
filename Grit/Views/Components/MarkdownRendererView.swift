@@ -19,6 +19,7 @@ import SwiftUI
 struct MarkdownRendererView: View {
     let source: String
     var highContrast: Bool = false
+    var imageBaseURL: String? = nil
 
     @State private var rendered: [MDRenderedBlock] = []
     @State private var isReady  = false
@@ -28,7 +29,7 @@ struct MarkdownRendererView: View {
             if isReady {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach(Array(rendered.enumerated()), id: \.offset) { _, block in
-                        MDRenderedBlockView(block: block, highContrast: highContrast)
+                        MDRenderedBlockView(block: block, highContrast: highContrast, imageBaseURL: imageBaseURL)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -65,6 +66,7 @@ private enum MDBlock {
     case unorderedList(items: [String])
     case orderedList(items: [String])
     case rule
+    case image(alt: String, url: String)
 }
 
 // MARK: - Render-ready block model (all AttributedStrings pre-computed)
@@ -79,6 +81,7 @@ private enum MDRenderedBlock {
     case unorderedList(items: [AttributedString])
     case orderedList(items: [AttributedString])
     case rule
+    case image(alt: String, url: String)
 }
 
 // MARK: - Block renderer  (structural → display-ready, runs off main thread)
@@ -100,6 +103,8 @@ private enum MDBlockRenderer {
             return .orderedList(items: items.map { inlineAttr($0) })
         case .rule:
             return .rule
+        case .image(let alt, let url):
+            return .image(alt: alt, url: url)
         }
     }
 
@@ -205,6 +210,12 @@ private enum MDParser {
                 continue
             }
 
+            // ── Standalone image ![alt](url) ──────────────────────────────────
+            if let (alt, url) = imageRef(trimmed) {
+                result.append(.image(alt: alt, url: url))
+                i += 1; continue
+            }
+
             // ── Paragraph ─────────────────────────────────────────────────────
             var paraLines: [String] = []
             while i < lines.count {
@@ -212,7 +223,8 @@ private enum MDParser {
                 if t.isEmpty { break }
                 if t.hasPrefix("#") || t.hasPrefix(">") ||
                    t.hasPrefix("```") || t.hasPrefix("~~~") ||
-                   ulText(t) != nil || olText(t) != nil || isHRule(t) { break }
+                   ulText(t) != nil || olText(t) != nil || isHRule(t) ||
+                   imageRef(t) != nil { break }
                 paraLines.append(lines[i])
                 i += 1
             }
@@ -249,6 +261,32 @@ private enum MDParser {
         guard idx < t.endIndex, t[idx] == " " else { return nil }
         return (num, String(t[t.index(after: idx)...]))
     }
+
+    /// Matches a standalone `![alt](url)` or `![alt](url "title")` line.
+    /// Returns `nil` for partial matches or empty URLs.
+    static func imageRef(_ t: String) -> (alt: String, url: String)? {
+        guard t.hasPrefix("![") else { return nil }
+        guard let closeBracket = t.firstIndex(of: "]") else { return nil }
+        let altStart = t.index(t.startIndex, offsetBy: 2)
+        let alt = String(t[altStart..<closeBracket])
+        let afterBracket = t[t.index(after: closeBracket)...]
+        guard afterBracket.hasPrefix("("), afterBracket.hasSuffix(")") else { return nil }
+        // Strip outer parens, then remove optional trailing title attribute:
+        //   url "title"  →  url
+        //   url 'title'  →  url
+        var inner = String(afterBracket.dropFirst().dropLast())
+            .trimmingCharacters(in: .whitespaces)
+        for quote: Character in ["\"", "'"] {
+            if inner.hasSuffix(String(quote)),
+               let openQuote = inner.dropLast().lastIndex(of: quote) {
+                let candidate = inner[inner.startIndex..<openQuote]
+                    .trimmingCharacters(in: .whitespaces)
+                if !candidate.isEmpty { inner = candidate; break }
+            }
+        }
+        guard !inner.isEmpty else { return nil }
+        return (alt: alt, url: inner)
+    }
 }
 
 // MARK: - Block view dispatcher (consumes pre-computed AttributedStrings — zero parsing)
@@ -256,6 +294,7 @@ private enum MDParser {
 private struct MDRenderedBlockView: View {
     let block:        MDRenderedBlock
     let highContrast: Bool
+    var imageBaseURL: String? = nil
 
     var body: some View {
         switch block {
@@ -266,6 +305,7 @@ private struct MDRenderedBlockView: View {
         case .unorderedList(let items):        MDUnorderedListView(items: items, highContrast: highContrast)
         case .orderedList(let items):          MDOrderedListView(items: items, highContrast: highContrast)
         case .rule:                            MDRuleView()
+        case .image(let alt, let url):         MDImageView(alt: alt, rawURL: url, baseURL: imageBaseURL)
         }
     }
 }
@@ -473,5 +513,410 @@ private struct MDRuleView: View {
         )
         .frame(height: 1)
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Authenticated image loader (shared by compact + reader image views)
+
+private struct MDAuthenticatedImage: View {
+    let url:         URL
+    let cornerRadius: CGFloat
+    let placeholder: CGFloat   // shimmer height
+
+    @State private var uiImage:  UIImage? = nil
+    @State private var failed:   Bool     = false
+    @State private var isLoading: Bool    = true
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ShimmerView()
+                    .frame(height: placeholder)
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            } else if let img = uiImage {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            }
+            // failed state handled by caller's placeholder fallback
+        }
+        .frame(maxWidth: .infinity)
+        .task(id: url) { await load() }
+    }
+
+    private func load() async {
+        isLoading = true
+        uiImage   = nil
+        failed    = false
+
+        var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 30)
+        if let token = AuthenticationService.shared.accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 200
+            if status == 200, let img = UIImage(data: data) {
+                uiImage = img
+            } else {
+                failed = true
+            }
+        } catch {
+            failed = true
+        }
+        isLoading = false
+    }
+}
+
+// MARK: - Image
+
+private struct MDImageView: View {
+    let alt:     String
+    let rawURL:  String
+    let baseURL: String?
+
+    private var resolvedURL: URL? {
+        if rawURL.hasPrefix("http://") || rawURL.hasPrefix("https://") {
+            return URL(string: rawURL)
+        }
+        guard let base = baseURL else { return nil }
+        // Ensure base ends with "/" so relative resolution works correctly for
+        // paths like "./image.png", "../assets/logo.png", or bare "image.png".
+        let baseWithSlash = base.hasSuffix("/") ? base : base + "/"
+        guard let baseURL = URL(string: baseWithSlash) else { return nil }
+        return URL(string: rawURL, relativeTo: baseURL)?.absoluteURL
+    }
+
+    var body: some View {
+        if let url = resolvedURL {
+            MDAuthenticatedImage(url: url, cornerRadius: 8, placeholder: 120)
+        } else {
+            imagePlaceholder
+        }
+    }
+
+    private var imagePlaceholder: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "photo")
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
+            Text(alt.isEmpty ? "Image" : alt)
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}
+
+// MARK: - Reader View
+
+/// A full-document reader presentation of markdown, optimised for comfortable
+/// long-form reading. Uses the same parser / renderer pipeline as
+/// `MarkdownRendererView` but applies larger, higher-contrast typography and
+/// a generous document layout. Intended to be placed directly inside a parent
+/// `ScrollView` (e.g. `FileContentView`).
+struct MarkdownReaderView: View {
+    let source: String
+    var imageBaseURL: String? = nil
+
+    @State private var rendered: [MDRenderedBlock] = []
+    @State private var isReady  = false
+
+    var body: some View {
+        Group {
+            if isReady {
+                VStack(alignment: .leading, spacing: 20) {
+                    ForEach(Array(rendered.enumerated()), id: \.offset) { _, block in
+                        MDReaderBlockView(block: block, imageBaseURL: imageBaseURL)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity)
+            } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    // Shimmer placeholders while parsing
+                    ShimmerView().frame(height: 26).frame(maxWidth: .infinity)
+                    ForEach(0..<4, id: \.self) { _ in
+                        ShimmerView().frame(height: 14).frame(maxWidth: .infinity)
+                    }
+                    ShimmerView().frame(height: 14).frame(maxWidth: 220, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeIn(duration: 0.15), value: isReady)
+        .task(id: source) {
+            let result = await Task.detached(priority: .userInitiated) {
+                MDParser.parse(source).map { MDBlockRenderer.render($0) }
+            }.value
+            rendered = result
+            isReady  = true
+        }
+    }
+}
+
+// MARK: - Reader block dispatcher
+
+private struct MDReaderBlockView: View {
+    let block: MDRenderedBlock
+    var imageBaseURL: String? = nil
+
+    var body: some View {
+        switch block {
+        case .heading(let lvl, let txt):      MDReaderHeadingView(level: lvl, text: txt)
+        case .paragraph(let txt):             MDReaderParagraphView(text: txt)
+        case .codeBlock(let lang, let lines): MDReaderCodeBlockView(language: lang, lines: lines)
+        case .blockquote(let lines):          MDReaderBlockquoteView(lines: lines)
+        case .unorderedList(let items):       MDReaderUnorderedListView(items: items)
+        case .orderedList(let items):         MDReaderOrderedListView(items: items)
+        case .rule:                           MDReaderRuleView()
+        case .image(let alt, let url):        MDReaderImageView(alt: alt, rawURL: url, baseURL: imageBaseURL)
+        }
+    }
+}
+
+// MARK: - Reader: Heading
+
+private struct MDReaderHeadingView: View {
+    let level: Int
+    let text:  AttributedString
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(text)
+                .font(headingFont)
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if level <= 2 {
+                LinearGradient(
+                    colors: [Color.primary.opacity(level == 1 ? 0.15 : 0.08), .clear],
+                    startPoint: .leading, endPoint: .trailing
+                )
+                .frame(height: level == 1 ? 1 : 0.5)
+            }
+        }
+        .padding(.top, level <= 2 ? 8 : level == 3 ? 4 : 0)
+    }
+
+    private var headingFont: Font {
+        switch level {
+        case 1:  return .system(size: 26, weight: .bold)
+        case 2:  return .system(size: 21, weight: .semibold)
+        case 3:  return .system(size: 18, weight: .semibold)
+        case 4:  return .system(size: 16, weight: .semibold)
+        default: return .system(size: 15, weight: .medium)
+        }
+    }
+}
+
+// MARK: - Reader: Paragraph
+
+private struct MDReaderParagraphView: View {
+    let text: AttributedString
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 16))
+            .foregroundStyle(.primary)
+            .lineSpacing(5)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
+}
+
+// MARK: - Reader: Code Block
+
+private struct MDReaderCodeBlockView: View {
+    let language: String?
+    let lines:    [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let lang = language {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.7))
+                        .frame(width: 6, height: 6)
+                    Text(lang)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.05))
+
+                Divider().opacity(0.3)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        Text(line.isEmpty ? " " : line)
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundStyle(.primary.opacity(0.85))
+                            .fixedSize(horizontal: true, vertical: false)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 2)
+                    }
+                }
+                .padding(.vertical, 10)
+            }
+        }
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+        )
+    }
+}
+
+// MARK: - Reader: Blockquote
+
+private struct MDReaderBlockquoteView: View {
+    let lines: [AttributedString]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color.accentColor)
+                .frame(width: 4)
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    if line.characters.isEmpty {
+                        Color.clear.frame(height: 4)
+                    } else {
+                        Text(line)
+                            .font(.system(size: 16).italic())
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            Color.accentColor.opacity(0.05),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(0.15), lineWidth: 0.5)
+        )
+    }
+}
+
+// MARK: - Reader: Unordered List
+
+private struct MDReaderUnorderedListView: View {
+    let items: [AttributedString]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                HStack(alignment: .top, spacing: 12) {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 5, height: 5)
+                        .padding(.top, 7)
+                    Text(item)
+                        .font(.system(size: 16))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Reader: Ordered List
+
+private struct MDReaderOrderedListView: View {
+    let items: [AttributedString]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                HStack(alignment: .top, spacing: 12) {
+                    Text("\(idx + 1).")
+                        .font(.system(size: 15, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.accentColor.opacity(0.8))
+                        .frame(minWidth: 24, alignment: .trailing)
+                    Text(item)
+                        .font(.system(size: 16))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Reader: Horizontal Rule
+
+private struct MDReaderRuleView: View {
+    var body: some View {
+        LinearGradient(
+            colors: [.clear, Color.primary.opacity(0.12), .clear],
+            startPoint: .leading, endPoint: .trailing
+        )
+        .frame(height: 1)
+        .padding(.vertical, 6)
+    }
+}
+
+// MARK: - Reader: Image
+
+private struct MDReaderImageView: View {
+    let alt:     String
+    let rawURL:  String
+    let baseURL: String?
+
+    private var resolvedURL: URL? {
+        if rawURL.hasPrefix("http://") || rawURL.hasPrefix("https://") {
+            return URL(string: rawURL)
+        }
+        guard let base = baseURL else { return nil }
+        // Ensure base ends with "/" so relative resolution works correctly for
+        // paths like "./image.png", "../assets/logo.png", or bare "image.png".
+        let baseWithSlash = base.hasSuffix("/") ? base : base + "/"
+        guard let baseURL = URL(string: baseWithSlash) else { return nil }
+        return URL(string: rawURL, relativeTo: baseURL)?.absoluteURL
+    }
+
+    var body: some View {
+        if let url = resolvedURL {
+            MDAuthenticatedImage(url: url, cornerRadius: 10, placeholder: 180)
+        } else {
+            readerPlaceholder
+        }
+    }
+
+    private var readerPlaceholder: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "photo")
+                .font(.system(size: 14))
+                .foregroundStyle(.tertiary)
+            Text(alt.isEmpty ? "Image" : alt)
+                .font(.system(size: 14))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

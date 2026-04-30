@@ -1,0 +1,129 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "7C76B22C",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "tip.small.001",
+      "localizations" : [
+        {
+          "description" : "A quick high-five to keep me going",
+          "displayName" : "High Five!",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.grit.tip.small",
+      "referenceName" : "Tip - High Five",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : false,
+      "internalID" : "tip.medium.001",
+      "localizations" : [
+        {
+          "description" : "A quick espresso shot",
+          "displayName" : "Small Coffee",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.grit.tip.medium",
+      "referenceName" : "Tip - Small Coffee",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "tip.large.001",
+      "localizations" : [
+        {
+          "description" : "A flat white for a coding session",
+          "displayName" : "Medium Coffee",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.grit.tip.large",
+      "referenceName" : "Tip - Medium Coffee",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "tip.xlarge.001",
+      "localizations" : [
+        {
+          "description" : "A grande to fuel a long night",
+          "displayName" : "Large Coffee",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.grit.tip.xlarge",
+      "referenceName" : "Tip - Large Coffee",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "14.99",
+      "familyShareable" : false,
+      "internalID" : "tip.bag.001",
+      "localizations" : [
+        {
+          "description" : "A whole bag of beans — serious fuel",
+          "displayName" : "Bag o' Coffee",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.grit.tip.bag",
+      "referenceName" : "Tip - Bag o' Coffee",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "29.99",
+      "familyShareable" : false,
+      "internalID" : "tip.crate.001",
+      "localizations" : [
+        {
+          "description" : "Enough coffee to mass-produce features",
+          "displayName" : "Crate o' Coffee",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.grit.tip.crate",
+      "referenceName" : "Tip - Crate o' Coffee",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

@@ -1,0 +1,74 @@
+default_platform(:ios)
+
+platform :ios do
+  lane :sync_certs do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APPL_ASC_KEY_ID"],
+      issuer_id: ENV["APPL_ASC_ISSUER_ID"],
+      key_filepath: ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"]
+    )
+
+    match(
+      type: "appstore",
+      app_identifier: ["com.stoicswe.grit.app", "com.stoicswe.grit.app.GritShareExtension", "com.stoicswe.grit.app.GritWidget"],
+      git_url: "https://oauth2:#{ENV["MATCH_TOKEN"]}@gitlab.com/stoicswe/grit-match-certs.git",
+      keychain_password: ENV["KCHNP"],
+      api_key: api_key,
+      readonly: false
+    )
+  end
+
+  lane :build_and_upload do |options|
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APPL_ASC_KEY_ID"],
+      issuer_id: ENV["APPL_ASC_ISSUER_ID"],
+      key_filepath: ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"]
+    )
+
+    match(
+      type: "appstore",
+      app_identifier: ["com.stoicswe.grit.app", "com.stoicswe.grit.app.GritShareExtension", "com.stoicswe.grit.app.GritWidget"],
+      git_url: "https://oauth2:#{ENV["MATCH_TOKEN"] || ENV["MATCH_GIT_PAT"]}@gitlab.com/stoicswe/grit-match-certs.git",
+      keychain_password: ENV["KCHNP"],
+      api_key: api_key,
+      readonly: false
+    )
+
+    increment_build_number(
+      build_number: "#{ENV["CI_PIPELINE_IID"]}.#{Time.now.strftime("%Y%m%d%H%M")}",
+      xcodeproj: "Grit.xcodeproj"
+    )
+
+    gym(
+      scheme: "Grit",
+      output_directory: ENV["EXPORT_PATH"],
+      archive_path: ENV["ARCHIVE_PATH"],
+      derived_data_path: ENV["DERIVED_DATA_PATH"],
+      export_method: "app-store",
+      clean: true,
+      xcargs: "CODE_SIGN_STYLE=Manual \
+        CODE_SIGN_IDENTITY=\"Apple Distribution: Nathaniel Bunch (#{ENV["APPLE_TEAM_ID"]})\" \
+        DEVELOPMENT_TEAM=\"#{ENV["APPLE_TEAM_ID"]}\" \
+        -allowProvisioningUpdates",
+      export_options: {
+        method: "app-store",
+        signingStyle: "manual",
+        teamID: ENV["APPLE_TEAM_ID"],
+        provisioningProfiles: {
+          "com.stoicswe.grit.app" => "match AppStore com.stoicswe.grit.app",
+          "com.stoicswe.grit.app.GritShareExtension" => "match AppStore com.stoicswe.grit.app.GritShareExtension",
+          "com.stoicswe.grit.app.GritWidget" => "match AppStore com.stoicswe.grit.app.GritWidget"
+        }
+      }
+    )
+
+    pilot(
+      ipa: Actions.lane_context[SharedValues::IPA_OUTPUT_PATH],
+      api_key: api_key,
+      distribute_external: options[:external] || false,
+      changelog: "Build #{ENV['CI_COMMIT_SHORT_SHA']} from branch #{ENV['CI_COMMIT_BRANCH']}",
+      notify_external_testers: options[:external] || false,
+      skip_waiting_for_build_processing: true
+    )
+  end
+end

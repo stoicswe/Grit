@@ -173,6 +173,7 @@ struct MRStateBadge: View {
 struct PipelineStatusBadge: View {
     let pipeline: Pipeline?
     var isLoading: Bool = false
+    var isTappable: Bool = false
 
     var body: some View {
         if isLoading && pipeline == nil {
@@ -195,6 +196,11 @@ struct PipelineStatusBadge: View {
                     .font(.system(size: 9, weight: .semibold))
                 Text(pipeline.label)
                     .font(.system(size: 11, weight: .medium))
+                if isTappable {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .opacity(0.7)
+                }
             }
             .foregroundStyle(pipeline.color)
             .padding(.horizontal, 7)

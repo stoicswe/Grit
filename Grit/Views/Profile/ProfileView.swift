@@ -4,11 +4,7 @@ struct ProfileView: View {
     @EnvironmentObject var authService: AuthenticationService
     @StateObject private var viewModel = ProfileViewModel()
 
-    // Follower profile overlay
-    @State private var showFollowerProfile    = false
-    @State private var followerProfileID:     Int    = 0
-    @State private var followerProfileUsername = ""
-    @State private var followerProfileAvatarURL: String? = nil
+    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
@@ -46,27 +42,25 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    NavigationLink {
-                        SettingsView()
+                    Button {
+                        showSettings = true
                     } label: {
                         Image(systemName: "gearshape")
                     }
                 }
             }
+            .navigationDestination(isPresented: $showSettings) {
+                SettingsView()
+            }
+            .navigationDestination(for: GitLabUser.self) { user in
+                PublicProfileView(userID: user.id, username: user.username, avatarURL: user.avatarURL)
+            }
+            .navigationDestination(for: Repository.Namespace.self) { ns in
+                GroupByIDView(namespace: ns)
+            }
         }
         .onAppear { Task { await viewModel.load() } }
         .refreshable { await viewModel.load() }
-        .overlay {
-            if showFollowerProfile {
-                UserProfileOverlay(
-                    userID:   followerProfileID,
-                    username: followerProfileUsername,
-                    avatarURL: followerProfileAvatarURL,
-                    isPresented: $showFollowerProfile
-                )
-                .transition(.opacity)
-            }
-        }
     }
 
     // MARK: - Subviews
@@ -228,14 +222,7 @@ struct ProfileView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
                     ForEach(viewModel.followers) { follower in
-                        Button {
-                            followerProfileID       = follower.id
-                            followerProfileUsername = follower.username
-                            followerProfileAvatarURL = follower.avatarURL
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-                                showFollowerProfile = true
-                            }
-                        } label: {
+                        NavigationLink(value: follower) {
                             VStack(spacing: 6) {
                                 AvatarView(urlString: follower.avatarURL,
                                            name: follower.name, size: 48)

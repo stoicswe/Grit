@@ -1,7 +1,8 @@
-import SwiftUI
-import UIKit
+import AppIntents
 import NaturalLanguage
+import SwiftUI
 import Translation
+import UIKit
 
 struct MergeRequestDetailView: View {
     let projectID: Int
@@ -9,18 +10,23 @@ struct MergeRequestDetailView: View {
 
     @StateObject private var viewModel = MergeRequestViewModel()
     @EnvironmentObject var settingsStore: SettingsStore
+    @EnvironmentObject var composerState: TabBarComposerState
     @ObservedObject private var aiService = AIAssistantService.shared
 
     @State private var showAISheet      = false
     @State private var showDiff         = false
     @State private var showComposer     = false
     @State private var replyToNote:     MRNote? = nil
+    @State private var selectedPipeline: Pipeline? = nil
 
     // Profile overlay
     @State private var showProfile      = false
     @State private var profileUserID:   Int    = 0
     @State private var profileUsername  = ""
     @State private var profileAvatarURL: String? = nil
+
+    // Head-commit signature (fetched once from the MR's head SHA)
+    @State private var headSignature: CommitSignature?
 
     // Live MR state (updates after merge)
     private var liveMR: MergeRequest { viewModel.selectedMR ?? mr }
@@ -42,6 +48,7 @@ struct MergeRequestDetailView: View {
                 }
 
                 branchCard
+                pipelinesSection
 
                 if let desc = liveMR.description,
                    !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -66,12 +73,24 @@ struct MergeRequestDetailView: View {
         }
         .navigationTitle("!\(mr.iid)")
         .navigationBarTitleDisplayMode(.inline)
-        // Three independent tasks so they run concurrently
+        // Five independent tasks so they run concurrently
         .task { await viewModel.loadMergeRequestDetail(projectID: projectID, mrIID: mr.iid) }
         .task { await viewModel.loadPermissions(projectID: projectID, mrIID: mr.iid) }
         .task { await viewModel.loadDiffs(projectID: projectID, mrIID: mr.iid) }
-        // Floating compose button — inset so it clears the content below
-        .safeAreaInset(edge: .bottom, spacing: 0) { composerFAB }
+        .task { await viewModel.loadMRPipelines(projectID: projectID, mrIID: mr.iid) }
+        .task { await loadHeadSignature() }
+        .onAppear  { composerState.register  { showComposer = true } }
+        .onDisappear { composerState.unregister() }
+        // On-screen awareness: lets Siri / Apple Intelligence know which
+        // merge request the user is currently viewing so it can act on it contextually.
+        .userActivity("com.stoicswe.grit.viewingMergeRequest") { activity in
+            activity.title = liveMR.title
+            activity.isEligibleForSearch = true
+            activity.isEligibleForPrediction = true
+            activity.targetContentIdentifier = "mr-\(mr.id)"
+            let entity = MergeRequestEntity(from: liveMR)
+            activity.appEntityIdentifier = EntityIdentifier(for: entity)
+        }
         .sheet(isPresented: $showAISheet) {
             AIResponseSheet(
                 title: "AI Code Review",
@@ -81,6 +100,9 @@ struct MergeRequestDetailView: View {
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $selectedPipeline) { pipeline in
+            PipelineDetailView(pipeline: pipeline, projectID: projectID)
         }
         .sheet(isPresented: $showComposer, onDismiss: { replyToNote = nil }) {
             MRCommentComposerSheet(
@@ -108,26 +130,6 @@ struct MergeRequestDetailView: View {
         }
     }
 
-    // MARK: - Floating Compose Button
-
-    private var composerFAB: some View {
-        HStack {
-            Spacer()
-            Button { showComposer = true } label: {
-                Image(systemName: "pencil")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
-                    .background(.tint, in: Circle())
-                    .shadow(color: Color.accentColor.opacity(0.45), radius: 14, y: 6)
-            }
-        }
-        .padding(.trailing, 20)
-        // When the AI button is visible it occupies ~80–132 pt from the screen bottom.
-        // Raising the FAB to 64 pt above the safe-area bottom clears that zone.
-        .padding(.bottom, aiService.isUserEnabled ? 64 : 12)
-    }
-
     // MARK: - Header Card
 
     private var headerCard: some View {
@@ -143,10 +145,20 @@ struct MergeRequestDetailView: View {
                             .background(.orange.opacity(0.15), in: Capsule())
                             .foregroundStyle(.orange)
                     }
-                    PipelineStatusBadge(
-                        pipeline: liveMR.headPipeline,
-                        isLoading: viewModel.selectedMR == nil && viewModel.isLoading
-                    )
+                    if let p = liveMR.headPipeline {
+                        Button { selectedPipeline = p } label: {
+                            PipelineStatusBadge(pipeline: p, isTappable: true)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        PipelineStatusBadge(
+                            pipeline: nil,
+                            isLoading: viewModel.selectedMR == nil && viewModel.isLoading
+                        )
+                    }
+                    if let sig = headSignature {
+                        SignatureVerificationChip(signature: sig)
+                    }
                     Spacer()
                     Text("!\(mr.iid)")
                         .font(.system(size: 12, design: .monospaced))
@@ -266,6 +278,46 @@ struct MergeRequestDetailView: View {
         }
         .foregroundStyle(.primary)
         .padding(.horizontal)
+    }
+
+    // MARK: - Pipelines Section
+
+    private var pipelinesSection: some View {
+        Group {
+            // Only render the section when there is something to show.
+            if viewModel.isPipelinesLoading || !viewModel.mrPipelines.isEmpty {
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        GlassSectionHeader(
+                            title: "Pipelines",
+                            trailing: viewModel.mrPipelines.isEmpty ? nil
+                                : "\(viewModel.mrPipelines.count)"
+                        )
+
+                        if viewModel.isPipelinesLoading && viewModel.mrPipelines.isEmpty {
+                            HStack(spacing: 10) {
+                                ProgressView().scaleEffect(0.8)
+                                Text("Loading pipelines…")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 6)
+                        } else {
+                            ForEach(viewModel.mrPipelines) { pipeline in
+                                PipelineRowButton(pipeline: pipeline) {
+                                    selectedPipeline = pipeline
+                                }
+                                if pipeline.id != viewModel.mrPipelines.last?.id {
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
     }
 
     // MARK: - Branch Card
@@ -589,6 +641,73 @@ struct MergeRequestDetailView: View {
         .padding(.horizontal)
         .animation(.easeInOut(duration: 0.2), value: locked)
     }
+
+    // MARK: - Head-commit Signature
+
+    /// Fetches the cryptographic signature of the MR's head commit (the latest
+    /// commit on the source branch at the time the MR was last updated).
+    /// Silently does nothing if the commit is unsigned or the fetch fails.
+    private func loadHeadSignature() async {
+        guard let sha = mr.diffRefs?.headSha, !sha.isEmpty else { return }
+        let auth = AuthenticationService.shared
+        let (token, baseURL) = await MainActor.run { (auth.accessToken, auth.baseURL) }
+        guard let token else { return }
+        headSignature = try? await GitLabAPIService.shared.fetchCommitSignature(
+            projectID: projectID, sha: sha,
+            baseURL: baseURL, token: token
+        )
+    }
+}
+
+// MARK: - Pipeline Row Button
+
+/// A single tappable row in the MR pipelines list.
+private struct PipelineRowButton: View {
+    let pipeline: Pipeline
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                // Status icon
+                Image(systemName: pipeline.icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(pipeline.color)
+                    .frame(width: 24)
+
+                // Pipeline ID + ref
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text("Pipeline #\(pipeline.id)")
+                            .font(.system(size: 14, weight: .medium))
+                        Text(pipeline.label)
+                            .font(.system(size: 12))
+                            .foregroundStyle(pipeline.color)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(pipeline.color.opacity(0.12), in: Capsule())
+                    }
+                    if let ref = pipeline.ref, !ref.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 9, weight: .semibold))
+                            Text(ref)
+                                .font(.system(size: 12, design: .monospaced))
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 // MARK: - MR Chat Bubble
@@ -606,7 +725,7 @@ private struct MRChatBubble: View {
     @State private var replyTriggered:    Bool    = false
     @State private var translatedText:    String? = nil
     @State private var showTranslated:    Bool    = false
-    @State private var translationConfig: TranslationSession.Configuration? = nil
+    @State private var translationConfig: Any? = nil  // holds TranslationSession.Configuration on iOS 18+
 
     private var tipRadius: CGFloat { isGrouped ? 18 : 4 }
 
@@ -678,12 +797,9 @@ private struct MRChatBubble: View {
                     .padding(.leading, 4)
             }
         }
-        .translationTask(translationConfig) { session in
-            do {
-                let response  = try await session.translate(note.body)
-                translatedText = response.targetText
-                showTranslated = true
-            } catch {}
+        .translationTaskIfAvailable(config: $translationConfig, text: note.body) { translated in
+            translatedText = translated
+            showTranslated = true
         }
     }
 
@@ -706,6 +822,7 @@ private struct MRChatBubble: View {
                 if isCurrentUser {
                     MarkdownRendererView(source: note.body, highContrast: true)
                         .environment(\.colorScheme, .dark)
+                        .tint(.white)
                 } else {
                     MarkdownRendererView(
                         source: showTranslated && translatedText != nil
@@ -715,26 +832,21 @@ private struct MRChatBubble: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(bubbleBackground)
             .clipShape(bubbleShape)
+            .background { bubbleBackground }
             .overlay(
                 bubbleShape.strokeBorder(
                     LinearGradient(
                         colors: isCurrentUser
-                            ? [.white.opacity(0.50), .white.opacity(0.12)]
-                            : [.white.opacity(0.65), .white.opacity(0.08)],
+                            ? [.white.opacity(0.38), .white.opacity(0.08)]
+                            : [.white.opacity(0.28), .white.opacity(0.04)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
                     lineWidth: 0.75
                 )
             )
-            .shadow(
-                color: isCurrentUser
-                    ? Color.accentColor.opacity(0.28)
-                    : Color.black.opacity(0.10),
-                radius: 8, y: 3
-            )
+            .shadow(color: Color.black.opacity(0.12), radius: 5, y: 2)
 
             // Translate button (independent of AI toggle)
             if settingsStore.translateCommentsEnabled
@@ -753,9 +865,11 @@ private struct MRChatBubble: View {
                     .padding(.horizontal, 4)
                 } else {
                     Button {
-                        translationConfig = TranslationSession.Configuration(
-                            source: nil, target: Locale.current.language
-                        )
+                        if #available(iOS 18, *) {
+                            translationConfig = TranslationSession.Configuration(
+                                source: nil, target: Locale.current.language
+                            )
+                        }
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "sparkles").font(.system(size: 11))
@@ -800,28 +914,30 @@ private struct MRChatBubble: View {
 
     @ViewBuilder
     private var bubbleBackground: some View {
-        if isCurrentUser {
-            // Solid accent base guarantees full contrast for white text regardless of
-            // what is scrolling behind the bubble. The glass look comes from the white
-            // shimmer layer, specular gradient, and gradient stroke — not transparency.
+        if #available(iOS 26, *) {
             ZStack {
-                bubbleShape.fill(Color.accentColor)
-                bubbleShape.fill(Color.white.opacity(0.10))
-                LinearGradient(
-                    colors: [.white.opacity(0.30), .clear],
-                    startPoint: .top,
-                    endPoint: UnitPoint(x: 0.5, y: 0.52)
-                )
-                .clipShape(bubbleShape)
+                bubbleShape.fill(.clear)
+                    .glassEffect(.regular, in: bubbleShape)
+                if isCurrentUser {
+                    bubbleShape.fill(Color.accentColor.opacity(0.35))
+                }
             }
         } else {
-            // Liquid glass: denser material for true frosted opacity + specular top-highlight
             ZStack {
-                bubbleShape.fill(.regularMaterial)
+                bubbleShape.fill(.ultraThinMaterial)
+                if isCurrentUser {
+                    bubbleShape.fill(Color.accentColor.opacity(0.45))
+                }
                 LinearGradient(
-                    colors: [.white.opacity(0.20), .clear],
+                    colors: [.white.opacity(isCurrentUser ? 0.32 : 0.22), .clear],
                     startPoint: .top,
-                    endPoint: UnitPoint(x: 0.5, y: 0.52)
+                    endPoint: UnitPoint(x: 0.5, y: 0.20)
+                )
+                .clipShape(bubbleShape)
+                LinearGradient(
+                    colors: [.clear, .white.opacity(isCurrentUser ? 0.10 : 0.06)],
+                    startPoint: UnitPoint(x: 0.5, y: 0.78),
+                    endPoint: .bottom
                 )
                 .clipShape(bubbleShape)
             }
@@ -967,5 +1083,32 @@ private struct MRSystemEventPill: View {
         if b.contains("milestone")  { return "flag" }
         if b.contains("mention")    { return "at" }
         return "info.circle"
+    }
+}
+
+// MARK: - Translation compatibility shim
+
+private extension View {
+    /// Applies `.translationTask` on iOS 18+ using an `Any?` config storage.
+    /// On iOS 17, this is a no-op — the Translate button is hidden by the
+    /// `#available` guard in the bubble view.
+    @ViewBuilder
+    func translationTaskIfAvailable(
+        config: Binding<Any?>,
+        text: String,
+        onTranslated: @escaping (String) -> Void
+    ) -> some View {
+        if #available(iOS 18, *) {
+            self.translationTask(
+                config.wrappedValue as? TranslationSession.Configuration
+            ) { session in
+                do {
+                    let response = try await session.translate(text)
+                    onTranslated(response.targetText)
+                } catch {}
+            }
+        } else {
+            self
+        }
     }
 }

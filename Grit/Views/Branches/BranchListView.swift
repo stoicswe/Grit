@@ -8,7 +8,26 @@ struct BranchListView: View {
     var body: some View {
         VStack(spacing: 8) {
             if isLoading && branches.isEmpty {
-                ProgressView().padding()
+                ForEach(0..<4, id: \.self) { _ in
+                    HStack(spacing: 12) {
+                        ShimmerView()
+                            .frame(width: 20, height: 20)
+                            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        VStack(alignment: .leading, spacing: 6) {
+                            ShimmerView().frame(height: 14).frame(maxWidth: 200)
+                            ShimmerView().frame(height: 11).frame(maxWidth: 140)
+                        }
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(.ultraThinMaterial,
+                                in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(.white.opacity(0.15), lineWidth: 0.5)
+                    )
+                }
+                .transition(.opacity)
             } else if branches.isEmpty {
                 ContentUnavailableView("No branches", systemImage: "arrow.triangle.branch")
             } else {
@@ -17,9 +36,11 @@ struct BranchListView: View {
                         BranchRowView(branch: branch)
                     }
                     .buttonStyle(.plain)
+                    .transition(.opacity)
                 }
             }
         }
+        .animation(.easeOut(duration: 0.25), value: branches.isEmpty)
     }
 }
 

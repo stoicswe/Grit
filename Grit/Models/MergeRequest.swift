@@ -19,7 +19,8 @@ struct MergeRequest: Codable, Identifiable, Hashable {
     let downvotes: Int
     let changesCount: String?
     let diffRefs: DiffRefs?
-    let labels: [String]?
+    let labelDetails: [IssueLabelDetail]?
+    var labels: [String]? { labelDetails?.map(\.name) }
     let draft: Bool?
     let hasConflicts: Bool?
     let mergeStatus: String?
@@ -51,10 +52,10 @@ struct MergeRequest: Codable, Identifiable, Hashable {
 
         var displayName: String {
             switch self {
-            case .opened: return "Open"
-            case .closed: return "Closed"
-            case .merged: return "Merged"
-            case .locked: return "Locked"
+            case .opened: return String(localized: "Open",   comment: "Merge request or issue state: currently open and active")
+            case .closed: return String(localized: "Closed", comment: "Merge request or issue state: closed without merging")
+            case .merged: return String(localized: "Merged", comment: "Merge request state: successfully merged into the target branch")
+            case .locked: return String(localized: "Locked", comment: "Merge request state: locked and cannot be modified")
             }
         }
 
@@ -96,7 +97,8 @@ struct MergeRequest: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, iid, title, description, state, author, assignee, reviewers
-        case upvotes, downvotes, labels, draft
+        case upvotes, downvotes, draft
+        case labelDetails = "labels"
         case sourceBranch = "source_branch"
         case targetBranch = "target_branch"
         case createdAt = "created_at"

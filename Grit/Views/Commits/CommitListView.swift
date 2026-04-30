@@ -8,7 +8,25 @@ struct CommitListView: View {
     var body: some View {
         VStack(spacing: 8) {
             if isLoading && commits.isEmpty {
-                ProgressView().padding()
+                ForEach(0..<4, id: \.self) { _ in
+                    HStack(spacing: 12) {
+                        ShimmerView()
+                            .frame(width: 34, height: 34)
+                            .clipShape(Circle())
+                        VStack(alignment: .leading, spacing: 6) {
+                            ShimmerView().frame(height: 14).frame(maxWidth: .infinity)
+                            ShimmerView().frame(height: 11).frame(maxWidth: 180)
+                        }
+                    }
+                    .padding(12)
+                    .background(.ultraThinMaterial,
+                                in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(.white.opacity(0.15), lineWidth: 0.5)
+                    )
+                }
+                .transition(.opacity)
             } else if commits.isEmpty {
                 ContentUnavailableView("No commits", systemImage: "clock.arrow.circlepath")
             } else {
@@ -17,9 +35,11 @@ struct CommitListView: View {
                         CommitRowView(commit: commit)
                     }
                     .buttonStyle(.plain)
+                    .transition(.opacity)
                 }
             }
         }
+        .animation(.easeOut(duration: 0.25), value: commits.isEmpty)
         .navigationDestination(for: CommitNavigation.self) { nav in
             CommitDetailView(commit: nav.commit, projectID: nav.projectID)
         }

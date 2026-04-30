@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var showDeveloperBio = false
     @State private var showTipJar       = false
     @State private var showReportIssue  = false
+    @State private var showLicense      = false
 
     var body: some View {
         NavigationStack {
@@ -24,14 +25,20 @@ struct SettingsView: View {
                 // Accent color section
                 colorSection
 
+                // Accessibility section
+                accessibilitySection
+
                 // Notifications section
                 notificationsSection
 
-                // AI Assistant section
-                aiSection
+                // Files section
+                filesSection
 
                 // Translation section (standalone, always visible)
                 translationSection
+
+                // AI Assistant section
+                aiSection
 
                 // About section
                 aboutSection
@@ -41,6 +48,9 @@ struct SettingsView: View {
 
                 // Danger zone
                 dangerSection
+
+                // GitLab account management (delete account, etc.)
+                gitlabAccountSection
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
@@ -55,6 +65,7 @@ struct SettingsView: View {
             .sheet(isPresented: $showDeveloperBio) { DeveloperView() }
             .sheet(isPresented: $showTipJar)       { TipJarView() }
             .sheet(isPresented: $showReportIssue)  { ReportIssueView() }
+            .sheet(isPresented: $showLicense)      { LicenseView() }
             .alert("Sign Out", isPresented: $showLogoutAlert) {
                 Button("Sign Out", role: .destructive) {
                     authService.logout()
@@ -121,10 +132,161 @@ struct SettingsView: View {
                     Image(systemName: "dock.rectangle")
                 }
             }
+
         } header: {
             Text("Appearance")
         } footer: {
             Text("System follows your device's appearance settings.")
+        }
+    }
+
+    // MARK: - Accessibility
+
+    private var accessibilitySection: some View {
+        Section {
+            // ── Font style ────────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: 10) {
+                Label {
+                    Text("Font Style")
+                        .font(.system(size: 15))
+                } icon: {
+                    Image(systemName: "textformat")
+                }
+
+                HStack(spacing: 8) {
+                    ForEach(FontStyle.allCases) { style in
+                        let isSelected = settingsStore.fontStyle == style
+                        Button {
+                            settingsStore.fontStyle = style
+                        } label: {
+                            VStack(spacing: 6) {
+                                Text("Aa")
+                                    .font(style.previewFont(size: 20))
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(isSelected ? Color.accentColor : .primary)
+                                Text(style.displayName)
+                                    .font(style.previewFont(size: 11))
+                                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(isSelected
+                                          ? Color.accentColor.opacity(0.12)
+                                          : Color.secondary.opacity(0.08))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(
+                                        isSelected ? Color.accentColor : Color.clear,
+                                        lineWidth: 1.5
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Text(settingsStore.fontStyle.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+            .padding(.vertical, 4)
+
+            // ── Text size slider ──────────────────────────────────────────
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label {
+                        Text("Text Size")
+                            .font(.system(size: 15))
+                    } icon: {
+                        Image(systemName: "textformat.size")
+                    }
+                    Spacer()
+                    Text(settingsStore.fontSizeStep.fontSizeLabel)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.accentColor)
+                        .animation(.easeInOut(duration: 0.15), value: settingsStore.fontSizeStep)
+                }
+
+                // Slider — snaps to whole steps via step: 1
+                HStack(spacing: 8) {
+                    Image(systemName: "textformat.size")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Slider(value: $settingsStore.fontSizeStep, in: 0...4, step: 1)
+                        .tint(Color.accentColor)
+                    Image(systemName: "textformat.size")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.secondary)
+                }
+
+                // Step labels beneath the slider
+                HStack(spacing: 0) {
+                    ForEach(["XS", "S", "Default", "L", "XL"], id: \.self) { label in
+                        Text(label)
+                            .font(.system(size: 10))
+                            .foregroundStyle(
+                                settingsStore.fontSizeStep.fontSizeLabel == label
+                                    ? Color.accentColor : Color.secondary.opacity(0.4)
+                            )
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+
+                // Live preview sentence
+                HStack(spacing: 6) {
+                    Image(systemName: "eye")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("The quick brown fox jumps over the lazy dog")
+                        .font(settingsStore.fontStyle.previewFont(size: 14))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .padding(.top, 2)
+            }
+            .padding(.vertical, 4)
+
+        } header: {
+            Text("Accessibility")
+        } footer: {
+            Text("Font style and text size apply throughout the app. 'Default' size honours your iOS Accessibility text setting.")
+        }
+    }
+
+    // MARK: - Files
+
+    private var filesSection: some View {
+        Section {
+            HStack {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Markdown Default View")
+                            .font(.system(size: 15))
+                        Text("How .md files open by default")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "doc.richtext")
+                }
+                Spacer()
+                Picker("Markdown Default View", selection: $settingsStore.markdownDefaultViewRaw) {
+                    ForEach(MarkdownDefaultView.allCases, id: \.rawValue) { mode in
+                        Text(mode.rawValue).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 140)
+            }
+        } header: {
+            Text("Files")
+        } footer: {
+            Text("Source shows raw text with syntax highlighting. Reader renders the document with formatted typography. You can switch between them using the \(Image(systemName: "doc.richtext")) button in any markdown file.")
         }
     }
 
@@ -312,6 +474,20 @@ struct SettingsView: View {
                 Text(appVersion)
                     .foregroundStyle(.secondary)
             }
+            Button { showLicense = true } label: {
+                HStack {
+                    Text("License")
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Text("MIT / Apache 2.0")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
             LabeledContent("GitLab API") {
                 Text("v4")
                     .foregroundStyle(.secondary)
@@ -393,6 +569,41 @@ struct SettingsView: View {
                 Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
                     .foregroundStyle(.red)
             }
+        }
+    }
+
+    // MARK: - GitLab Account
+
+    private var gitlabAccountSection: some View {
+        Section {
+            Button {
+                let trimmed = authService.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                if let url = URL(string: "\(trimmed)/-/profile/account") {
+                    openURL(url)
+                }
+            } label: {
+                HStack {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Manage GitLab Account")
+                                .font(.system(size: 15))
+                                .foregroundStyle(.primary)
+                            Text("Open account settings to delete your account")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "person.crop.circle.badge.exclamationmark")
+                    }
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("GitLab Account")
+        } footer: {
+            Text("Account deletion is handled on the GitLab website. This will open your account settings in the browser.")
         }
     }
 

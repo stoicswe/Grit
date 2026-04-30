@@ -1,13 +1,21 @@
-import SwiftUI
-import UIKit
+import AppIntents
 import NaturalLanguage
+import SwiftUI
 import Translation
+import UIKit
+
+/// Wrapper used as a NavigationLink value for child task issues inside IssueDetailView.
+/// Using a distinct type avoids clashing with InboxView's `navigationDestination(for: GitLabIssue.self)`.
+struct ChildTaskNavigation: Hashable {
+    let issue: GitLabIssue
+}
 
 struct IssueDetailView: View {
     let issue:     GitLabIssue
     let projectID: Int
 
     @EnvironmentObject var settingsStore: SettingsStore
+    @EnvironmentObject var composerState: TabBarComposerState
     @StateObject private var viewModel = IssueDetailViewModel()
     @ObservedObject private var aiService = AIAssistantService.shared
     @State private var showComposer  = false
@@ -16,6 +24,14 @@ struct IssueDetailView: View {
     @State private var profileUsername: String = ""
     @State private var profileAvatarURL: String? = nil
     @State private var showProfile = false
+    @State private var newTaskText = ""
+
+    // Description editing
+    @State private var isEditingDescription = false
+    @State private var editDescriptionText  = ""
+
+    // Label picker
+    @State private var showLabelPicker = false
 
     var body: some View {
         ScrollView {
@@ -30,8 +46,10 @@ struct IssueDetailView: View {
                 labelsCard
                 assigneesCard
                 descriptionCard
+                tasksCard
                 chatSection
             }
+            .padding(.top, 12)
             .padding(.bottom, 20)
         }
         .navigationTitle("#\(issue.iid)")
@@ -46,9 +64,24 @@ struct IssueDetailView: View {
                 }
             }
         }
+        .navigationDestination(for: ChildTaskNavigation.self) { nav in
+            IssueDetailView(issue: nav.issue, projectID: nav.issue.projectID)
+                .environmentObject(settingsStore)
+                .environmentObject(composerState)
+        }
         .task { await viewModel.load(projectID: projectID, issue: issue) }
-        // Floating compose button inset so it doesn't obscure content
-        .safeAreaInset(edge: .bottom, spacing: 0) { composerFAB }
+        .onAppear  { composerState.register  { showComposer = true } }
+        .onDisappear { composerState.unregister() }
+        // On-screen awareness: lets Siri / Apple Intelligence know which
+        // issue the user is currently viewing so it can act on it contextually.
+        .userActivity("com.stoicswe.grit.viewingIssue") { activity in
+            activity.title = issue.title
+            activity.isEligibleForSearch = true
+            activity.isEligibleForPrediction = true
+            activity.targetContentIdentifier = "issue-\(issue.id)"
+            let entity = IssueEntity(from: issue)
+            activity.appEntityIdentifier = EntityIdentifier(for: entity)
+        }
         .overlay {
             if showProfile, let uid = profileForUserID {
                 UserProfileOverlay(
@@ -113,26 +146,6 @@ struct IssueDetailView: View {
         }
         .foregroundStyle(.tint)
         .disabled(viewModel.isTogglingSubscription)
-    }
-
-    // MARK: - Floating Compose Button
-
-    private var composerFAB: some View {
-        HStack {
-            Spacer()
-            Button { showComposer = true } label: {
-                Image(systemName: "pencil")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
-                    .background(.tint, in: Circle())
-                    .shadow(color: Color.accentColor.opacity(0.45), radius: 14, y: 6)
-            }
-        }
-        .padding(.trailing, 20)
-        // When the AI button is visible it occupies ~80–132 pt from the screen bottom.
-        // Raising the FAB to 64 pt above the safe-area bottom clears that zone.
-        .padding(.bottom, aiService.isUserEnabled ? 64 : 12)
     }
 
     // MARK: - Header Card
@@ -207,8 +220,73 @@ struct IssueDetailView: View {
 
     private var statsRow: some View {
         HStack(spacing: 10) {
-            StatBadge(title: "Upvotes",   value: "\(issue.upvotes)",   icon: "hand.thumbsup.fill")
-            StatBadge(title: "Downvotes", value: "\(issue.downvotes)", icon: "hand.thumbsdown")
+            // ── Upvote ────────────────────────────────────────────────────
+            Button {
+                Task { await viewModel.toggleUpvote(projectID: projectID, issueIID: issue.iid) }
+            } label: {
+                VStack(spacing: 4) {
+                    if viewModel.isVoting {
+                        ProgressView().scaleEffect(0.7).frame(height: 18)
+                    } else {
+                        Image(systemName: viewModel.myUpvoteID != nil
+                              ? "hand.thumbsup.fill" : "hand.thumbsup")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(viewModel.myUpvoteID != nil ? Color.green : .secondary)
+                    }
+                    Text("\(viewModel.upvotes)")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                    Text("Upvotes")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(
+                            viewModel.myUpvoteID != nil ? Color.green.opacity(0.4) : Color.white.opacity(0.12),
+                            lineWidth: viewModel.myUpvoteID != nil ? 1 : 0.5
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isVoting)
+
+            // ── Downvote ──────────────────────────────────────────────────
+            Button {
+                Task { await viewModel.toggleDownvote(projectID: projectID, issueIID: issue.iid) }
+            } label: {
+                VStack(spacing: 4) {
+                    if viewModel.isVoting {
+                        ProgressView().scaleEffect(0.7).frame(height: 18)
+                    } else {
+                        Image(systemName: viewModel.myDownvoteID != nil
+                              ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(viewModel.myDownvoteID != nil ? Color.red : .secondary)
+                    }
+                    Text("\(viewModel.downvotes)")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                    Text("Downvotes")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(
+                            viewModel.myDownvoteID != nil ? Color.red.opacity(0.4) : Color.white.opacity(0.12),
+                            lineWidth: viewModel.myDownvoteID != nil ? 1 : 0.5
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isVoting)
+
+            // ── Comments (non-interactive) ────────────────────────────────
             StatBadge(
                 title: "Comments",
                 value: "\(viewModel.notes.filter { !$0.system }.count)",
@@ -222,31 +300,67 @@ struct IssueDetailView: View {
 
     @ViewBuilder
     private var labelsCard: some View {
+        let labels = viewModel.liveLabelDetails
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
-                GlassSectionHeader(
-                    title: "Labels",
-                    trailing: issue.labels.isEmpty ? nil : "\(issue.labels.count)"
-                )
-                if issue.labels.isEmpty {
-                    Label("No labels", systemImage: "tag.slash")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                HStack {
+                    GlassSectionHeader(
+                        title: "Labels",
+                        trailing: labels.isEmpty ? nil : "\(labels.count)"
+                    )
+                    if viewModel.isSavingLabels {
+                        ProgressView().scaleEffect(0.7).padding(.leading, 4)
+                    } else if viewModel.canCloseIssue {
+                        Button { showLabelPicker = true } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 28, height: 28)
+                                .background(.ultraThinMaterial, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                if labels.isEmpty {
+                    Button { showLabelPicker = true } label: {
+                        Label("Add labels", systemImage: "tag")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!viewModel.canCloseIssue)
                 } else {
+                    let fallback = SettingsStore.shared.accentColor ?? Color.accentColor
                     FlowLayout(spacing: 6) {
-                        ForEach(issue.labels, id: \.self) { label in
-                            Text(label)
+                        ForEach(labels) { detail in
+                            let c = detail.swiftUIColor(fallback: fallback)
+                            Text(detail.name)
                                 .font(.system(size: 11))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
-                                .background(Color.accentColor.opacity(0.12), in: Capsule())
-                                .foregroundStyle(.tint)
+                                .background(c.opacity(0.15), in: Capsule())
+                                .foregroundStyle(c)
                         }
                     }
                 }
             }
         }
         .padding(.horizontal)
+        .sheet(isPresented: $showLabelPicker) {
+            IssueEditLabelSheet(
+                selectedNames: Set(labels.map(\.name)),
+                available:     viewModel.availableLabels
+            ) { chosen in
+                Task {
+                    await viewModel.saveLabels(
+                        projectID: projectID,
+                        issueIID:  issue.iid,
+                        labelNames: Array(chosen)
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - Assignees
@@ -281,12 +395,234 @@ struct IssueDetailView: View {
 
     @ViewBuilder
     private var descriptionCard: some View {
-        if let desc = issue.description,
-           !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let liveDesc = viewModel.liveDescription ?? issue.description ?? ""
+        let hasDesc  = !liveDesc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        if hasDesc || viewModel.canCloseIssue {
             GlassCard {
                 VStack(alignment: .leading, spacing: 12) {
-                    GlassSectionHeader(title: "Description")
-                    MarkdownRendererView(source: desc)
+                    HStack {
+                        GlassSectionHeader(title: "Description")
+                        if viewModel.isUpdatingDescription {
+                            ProgressView().scaleEffect(0.7).padding(.leading, 4)
+                        } else if viewModel.canCloseIssue && !isEditingDescription {
+                            Button {
+                                editDescriptionText = liveDesc
+                                isEditingDescription = true
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 28, height: 28)
+                                    .background(.ultraThinMaterial, in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if isEditingDescription {
+                        TextEditor(text: $editDescriptionText)
+                            .font(.system(size: 14))
+                            .frame(minHeight: 120)
+                            .scrollContentBackground(.hidden)
+                            .padding(8)
+                            .background(.ultraThinMaterial,
+                                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(Color.accentColor.opacity(0.4), lineWidth: 1)
+                            )
+
+                        HStack(spacing: 10) {
+                            Button("Cancel") {
+                                isEditingDescription = false
+                            }
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+
+                            Spacer()
+
+                            Button {
+                                let text = editDescriptionText
+                                isEditingDescription = false
+                                Task {
+                                    await viewModel.saveDescription(
+                                        text, projectID: projectID, issueIID: issue.iid)
+                                }
+                            } label: {
+                                Text("Save")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 6)
+                                    .background(Color.accentColor, in: Capsule())
+                                    .foregroundStyle(.white)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } else if hasDesc {
+                        MarkdownRendererView(source: liveDesc)
+                    } else {
+                        Button {
+                            editDescriptionText = ""
+                            isEditingDescription = true
+                        } label: {
+                            Text("Add a description…")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+
+    // MARK: - Tasks Card
+
+    @ViewBuilder
+    private var tasksCard: some View {
+        let markdownTasks = viewModel.parsedTasks()
+        let linkedTasks   = viewModel.childTasks
+        let hasContent    = !markdownTasks.isEmpty || !linkedTasks.isEmpty || viewModel.canCloseIssue
+
+        if hasContent {
+            GlassCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        GlassSectionHeader(
+                            title: "Tasks",
+                            trailing: linkedTasks.isEmpty && markdownTasks.isEmpty ? nil :
+                                "\(linkedTasks.filter { !$0.isOpen }.count + markdownTasks.filter(\.isDone).count)/\(linkedTasks.count + markdownTasks.count)"
+                        )
+                        if viewModel.isUpdatingDescription {
+                            ProgressView().scaleEffect(0.7).padding(.leading, 4)
+                        }
+                    }
+
+                    // ── Linked task-type child issues (navigable) ──────────
+                    if !linkedTasks.isEmpty {
+                        ForEach(linkedTasks) { task in
+                            let isToggling = viewModel.togglingTaskIDs.contains(task.id)
+                            HStack(spacing: 10) {
+                                // Checkbox — closes / reopens the task issue
+                                Button {
+                                    Task { await viewModel.toggleChildTaskState(task: task) }
+                                } label: {
+                                    Group {
+                                        if isToggling {
+                                            ProgressView()
+                                                .frame(width: 19, height: 19)
+                                        } else {
+                                            Image(systemName: task.isOpen
+                                                  ? "square" : "checkmark.square.fill")
+                                                .foregroundStyle(task.isOpen ? Color.secondary : Color.green)
+                                                .font(.system(size: 19))
+                                        }
+                                    }
+                                    .contentShape(Rectangle().inset(by: -6))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isToggling)
+
+                                // Title + project path + chevron — navigates to task detail
+                                NavigationLink(value: ChildTaskNavigation(issue: task)) {
+                                    HStack(spacing: 0) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(task.title)
+                                                .font(.system(size: 14))
+                                                .foregroundStyle(task.isOpen ? .primary : .secondary)
+                                                .strikethrough(!task.isOpen, color: .secondary)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                            if let path = task.projectPath {
+                                                Text(path)
+                                                    .font(.system(size: 11, design: .monospaced))
+                                                    .foregroundStyle(.tertiary)
+                                            }
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.vertical, 2)
+                        }
+
+                        if !markdownTasks.isEmpty {
+                            Divider().opacity(0.3)
+                        }
+                    }
+
+                    // ── Markdown checklist items (toggleable, not separate issues) ──
+                    if !markdownTasks.isEmpty {
+                        let progress = Double(markdownTasks.filter(\.isDone).count) / Double(markdownTasks.count)
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.secondary.opacity(0.15)).frame(height: 4)
+                                Capsule().fill(Color.green)
+                                    .frame(width: geo.size.width * progress, height: 4)
+                                    .animation(.easeInOut(duration: 0.3), value: progress)
+                            }
+                        }
+                        .frame(height: 4)
+
+                        ForEach(Array(markdownTasks.enumerated()), id: \.element.id) { idx, task in
+                            HStack(spacing: 10) {
+                                Button {
+                                    Task {
+                                        await viewModel.toggleTask(
+                                            at: idx, projectID: projectID, issueIID: issue.iid)
+                                    }
+                                } label: {
+                                    Image(systemName: task.isDone
+                                          ? "checkmark.square.fill" : "square")
+                                        .foregroundStyle(task.isDone ? .green : .secondary)
+                                        .font(.system(size: 19))
+                                        .contentShape(Rectangle().inset(by: -6))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(!viewModel.canCloseIssue)
+
+                                Text(task.text)
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(task.isDone ? .secondary : .primary)
+                                    .strikethrough(task.isDone, color: .secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer()
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+
+                    if linkedTasks.isEmpty && markdownTasks.isEmpty {
+                        Label("No tasks yet", systemImage: "checkmark.square")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // ── Add markdown task (users who can edit) ─────────────
+                    if viewModel.canCloseIssue {
+                        Divider().opacity(0.4)
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus.square")
+                                .foregroundStyle(.secondary)
+                                .font(.system(size: 15))
+                            TextField("Add a task…", text: $newTaskText)
+                                .font(.system(size: 14))
+                                .onSubmit {
+                                    let text = newTaskText
+                                    newTaskText = ""
+                                    Task {
+                                        await viewModel.createChildTask(
+                                            text, projectID: projectID, issueIID: issue.iid)
+                                    }
+                                }
+                        }
+                    }
                 }
             }
             .padding(.horizontal)
@@ -388,7 +724,7 @@ private struct IssueChatBubble: View {
     @State private var showProfile:      Bool    = false
     @State private var translatedText:   String? = nil
     @State private var showTranslated:   Bool    = false
-    @State private var translationConfig: TranslationSession.Configuration? = nil
+    @State private var translationConfig: Any? = nil  // holds TranslationSession.Configuration on iOS 18+
 
     /// Tip corner radius: flat for the first in a sequence, rounded when grouped
     private var tipRadius: CGFloat { isGrouped ? 18 : 4 }
@@ -463,14 +799,9 @@ private struct IssueChatBubble: View {
                     .padding(.leading, 4)
             }
         }
-        .translationTask(translationConfig) { session in
-            do {
-                let response = try await session.translate(note.body)
-                translatedText = response.targetText
-                showTranslated = true
-            } catch {
-                // Translation failed silently
-            }
+        .translationTaskIfAvailable(config: $translationConfig, text: note.body) { translated in
+            translatedText = translated
+            showTranslated = true
         }
     }
 
@@ -493,33 +824,29 @@ private struct IssueChatBubble: View {
                 if isCurrentUser {
                     MarkdownRendererView(source: note.body, highContrast: true)
                         .environment(\.colorScheme, .dark)
+                        .tint(.white)
                 } else {
                     MarkdownRendererView(source: showTranslated && translatedText != nil ? (translatedText ?? note.body) : note.body)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(bubbleBackground)
             .clipShape(bubbleShape)
+            .background { bubbleBackground }
             .overlay(
                 bubbleShape
                     .strokeBorder(
                         LinearGradient(
                             colors: isCurrentUser
-                                ? [.white.opacity(0.50), .white.opacity(0.12)]
-                                : [.white.opacity(0.65), .white.opacity(0.08)],
+                                ? [.white.opacity(0.38), .white.opacity(0.08)]
+                                : [.white.opacity(0.28), .white.opacity(0.04)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
                         lineWidth: 0.75
                     )
             )
-            .shadow(
-                color: isCurrentUser
-                    ? Color.accentColor.opacity(0.28)
-                    : Color.black.opacity(0.10),
-                radius: 8, y: 3
-            )
+            .shadow(color: Color.black.opacity(0.12), radius: 5, y: 2)
 
             // Translate button / toggle — independent of the AI toggle
             if settingsStore.translateCommentsEnabled
@@ -541,7 +868,9 @@ private struct IssueChatBubble: View {
                     .padding(.horizontal, 4)
                 } else {
                     Button {
-                        translationConfig = TranslationSession.Configuration(source: nil, target: Locale.current.language)
+                        if #available(iOS 18, *) {
+                            translationConfig = TranslationSession.Configuration(source: nil, target: Locale.current.language)
+                        }
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "sparkles")
@@ -575,28 +904,30 @@ private struct IssueChatBubble: View {
 
     @ViewBuilder
     private var bubbleBackground: some View {
-        if isCurrentUser {
-            // Solid accent base guarantees full contrast for white text regardless of
-            // what is scrolling behind the bubble. The glass look comes from the white
-            // shimmer layer, specular gradient, and gradient stroke — not transparency.
+        if #available(iOS 26, *) {
             ZStack {
-                bubbleShape.fill(Color.accentColor)
-                bubbleShape.fill(Color.white.opacity(0.10))
-                LinearGradient(
-                    colors: [.white.opacity(0.30), .clear],
-                    startPoint: .top,
-                    endPoint: UnitPoint(x: 0.5, y: 0.52)
-                )
-                .clipShape(bubbleShape)
+                bubbleShape.fill(.clear)
+                    .glassEffect(.regular, in: bubbleShape)
+                if isCurrentUser {
+                    bubbleShape.fill(Color.accentColor.opacity(0.35))
+                }
             }
         } else {
-            // Liquid glass: denser material for true frosted opacity + specular top-highlight
             ZStack {
-                bubbleShape.fill(.regularMaterial)
+                bubbleShape.fill(.ultraThinMaterial)
+                if isCurrentUser {
+                    bubbleShape.fill(Color.accentColor.opacity(0.45))
+                }
                 LinearGradient(
-                    colors: [.white.opacity(0.20), .clear],
+                    colors: [.white.opacity(isCurrentUser ? 0.32 : 0.22), .clear],
                     startPoint: .top,
-                    endPoint: UnitPoint(x: 0.5, y: 0.52)
+                    endPoint: UnitPoint(x: 0.5, y: 0.20)
+                )
+                .clipShape(bubbleShape)
+                LinearGradient(
+                    colors: [.clear, .white.opacity(isCurrentUser ? 0.10 : 0.06)],
+                    startPoint: UnitPoint(x: 0.5, y: 0.78),
+                    endPoint: .bottom
                 )
                 .clipShape(bubbleShape)
             }
@@ -773,6 +1104,106 @@ private struct FlowLayout: Layout {
             view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+// MARK: - Issue Edit Label Sheet
+
+private struct IssueEditLabelSheet: View {
+    /// Pre-selected label names when the sheet opens.
+    let available:  [ProjectLabel]
+    let onSave:     (Set<String>) -> Void
+
+    @State private var selected: Set<String>
+    @State private var query = ""
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var settingsStore = SettingsStore.shared
+
+    private var userColor: Color { settingsStore.accentColor ?? .accentColor }
+
+    init(selectedNames: Set<String>, available: [ProjectLabel], onSave: @escaping (Set<String>) -> Void) {
+        self.available = available
+        self.onSave    = onSave
+        _selected      = State(initialValue: selectedNames)
+    }
+
+    private var filtered: [ProjectLabel] {
+        query.isEmpty ? available : available.filter { $0.name.localizedCaseInsensitiveContains(query) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(filtered) { label in
+                    Button {
+                        if selected.contains(label.name) {
+                            selected.remove(label.name)
+                        } else {
+                            selected.insert(label.name)
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Circle()
+                                .fill(label.swiftUIColor)
+                                .frame(width: 12, height: 12)
+                            Text(label.name)
+                                .font(.system(size: 15))
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if selected.contains(label.name) {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(userColor)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 2)
+                }
+            }
+            .searchable(text: $query, prompt: "Filter labels")
+            .navigationTitle("Labels")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(selected)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Translation compatibility shim
+
+private extension View {
+    /// Applies `.translationTask` on iOS 18+ using an `Any?` config storage.
+    /// On iOS 17, this is a no-op — the Translate button is hidden by the
+    /// `#available` guard in the bubble view.
+    @ViewBuilder
+    func translationTaskIfAvailable(
+        config: Binding<Any?>,
+        text: String,
+        onTranslated: @escaping (String) -> Void
+    ) -> some View {
+        if #available(iOS 18, *) {
+            self.translationTask(
+                config.wrappedValue as? TranslationSession.Configuration
+            ) { session in
+                do {
+                    let response = try await session.translate(text)
+                    onTranslated(response.targetText)
+                } catch {}
+            }
+        } else {
+            self
         }
     }
 }

@@ -36,7 +36,7 @@ struct DeveloperView: View {
                         VStack(spacing: 4) {
                             Text("Nathaniel Knudsen")
                                 .font(.system(size: 22, weight: .bold))
-                            Text("iOS Developer")
+                            Text("Senior Software Developer, 7+ years")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -45,10 +45,10 @@ struct DeveloperView: View {
 
                     // MARK: - Bio
 
-                    Text("Passionate iOS developer building tools that make developers' lives easier. Grit was built out of the frustration of not having a great native GitLab client on iPhone — so I made one.")
+                    Text("A C++ and Java developer by profession, but a Swift and Haskell hobbyist. I'm passionate about building things that make a positive impact on people's lives, and try to learn new things when I have free time. I am a practicing zen and stoic philosopher, love to read, and am an avid enjoyer of games (Death Stranding, Warhammer 40k, Civ, Stellaris, Arcs (board game). I was frustrated that there wasn't a native GitLab client for my phone, so figued...why not make one? Thank you for checking out Grit, and I hope you will find it useful <3")
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                        .multilineTextAlignment(.leading)
                         .lineSpacing(3)
                         .padding(.horizontal, 28)
 
@@ -81,7 +81,7 @@ struct DeveloperView: View {
                     .padding(.bottom, 40)
                 }
             }
-            .navigationTitle("Developer")
+            .navigationTitle("About the Developer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

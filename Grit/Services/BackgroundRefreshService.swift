@@ -41,6 +41,7 @@ final class BackgroundRefreshService {
 
     /// Fetches unread notifications from GitLab, fires local notifications for any
     /// that haven't been delivered yet, and updates the app badge.
+    /// Also silently refreshes open MRs for every repository the user has recently visited.
     func performRefresh() async {
         // Always schedule the next run first so it's queued even if we exit early.
         scheduleNextRefresh()
@@ -51,11 +52,66 @@ final class BackgroundRefreshService {
         }
         guard let token, !baseURL.isEmpty else { return }
 
-        do {
-            let all = try await api.fetchNotifications(baseURL: baseURL, token: token)
-            await processNewNotifications(all)
-        } catch {
-            // Background tasks must not crash — silently swallow errors.
+        // Run notification polling and MR refresh concurrently — they are fully independent.
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { [weak self] in
+                guard let self else { return }
+                do {
+                    let all = try await self.api.fetchNotifications(baseURL: baseURL, token: token)
+                    await self.processNewNotifications(all)
+                } catch {
+                    // Background tasks must not crash — silently swallow errors.
+                }
+            }
+
+            group.addTask { [weak self] in
+                guard let self else { return }
+                await self.refreshMRsForCachedRepos(token: token, baseURL: baseURL)
+            }
+        }
+    }
+
+    // MARK: - MR refresh for recently-visited repos
+
+    /// Fetches the latest open MRs for every project the user has a cached detail
+    /// bundle for, and writes the result back to cache.  This keeps MR state fresh
+    /// between sessions without requiring the user to re-open each repository.
+    ///
+    /// Runs at background priority; errors for individual projects are swallowed so
+    /// a single failing project does not abort the whole pass.
+    private func refreshMRsForCachedRepos(token: String, baseURL: String) async {
+        let cache      = RepoCacheStore.shared
+        let projectIDs = await cache.cachedProjectIDs()
+        guard !projectIDs.isEmpty else { return }
+
+        await withTaskGroup(of: Void.self) { group in
+            for projectID in projectIDs {
+                group.addTask(priority: .background) {
+                    guard let fresh = try? await self.api.fetchMergeRequests(
+                        projectID: projectID, baseURL: baseURL, token: token
+                    ) else { return }
+
+                    // Update the standalone MR list cache entry.
+                    await cache.set(fresh, for: .mrList(projectID: projectID),
+                                    ttl: RepoCacheStore.mrListTTL)
+
+                    // Patch the detail bundle so the next load shows current MR state.
+                    if let existing: CachedRepoDetail = await cache.get(
+                        .repoDetail(projectID: projectID), allowStale: true
+                    ) {
+                        let updated = CachedRepoDetail(
+                            repository:    existing.repository,
+                            branches:      existing.branches,
+                            mergeRequests: fresh,
+                            commits:       existing.commits,
+                            selectedBranch: existing.selectedBranch,
+                            hasPipeline:   existing.hasPipeline
+                        )
+                        await cache.set(updated, for: .repoDetail(projectID: projectID),
+                                        ttl: RepoCacheStore.repoDetailTTL)
+                    }
+                }
+            }
         }
     }
 

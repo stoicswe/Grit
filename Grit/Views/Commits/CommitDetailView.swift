@@ -8,6 +8,7 @@ struct CommitDetailView: View {
     @StateObject private var diffVM = CommitDiffViewModel()
     @State private var aiExplanation: String?
     @State private var showAISheet = false
+    @State private var signature: CommitSignature?
 
     var body: some View {
         ScrollView {
@@ -58,15 +59,20 @@ struct CommitDetailView: View {
 
                         Divider()
 
-                        // SHA
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Commit SHA")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(commit.id)
-                                .font(.system(size: 13, design: .monospaced))
-                                .foregroundStyle(.primary)
-                                .textSelection(.enabled)
+                        // SHA + optional signature badge
+                        VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Commit SHA")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(commit.id)
+                                    .font(.system(size: 13, design: .monospaced))
+                                    .foregroundStyle(.primary)
+                                    .textSelection(.enabled)
+                            }
+                            if let sig = signature {
+                                SignatureVerificationChip(signature: sig)
+                            }
                         }
                     }
                 }
@@ -159,6 +165,7 @@ struct CommitDetailView: View {
         .navigationTitle(commit.shortSHA)
         .navigationBarTitleDisplayMode(.inline)
         .task { await diffVM.load(projectID: projectID, sha: commit.id) }
+        .task { await loadSignature() }
         .sheet(isPresented: $showAISheet) {
             AIResponseSheet(
                 title: "Commit Explanation",
@@ -237,6 +244,16 @@ struct CommitDetailView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
         .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func loadSignature() async {
+        let auth = AuthenticationService.shared
+        let (token, baseURL) = await MainActor.run { (auth.accessToken, auth.baseURL) }
+        guard let token else { return }
+        signature = try? await GitLabAPIService.shared.fetchCommitSignature(
+            projectID: projectID, sha: commit.id,
+            baseURL: baseURL, token: token
+        )
     }
 
     private func requestAIExplanation() async {

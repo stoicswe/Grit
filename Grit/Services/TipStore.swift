@@ -3,11 +3,14 @@ import Foundation
 
 /// Manages consumable in-app tip purchases using StoreKit 2.
 ///
-/// Before shipping, register three Consumable in-app purchases in App Store Connect
+/// Before shipping, register six Consumable in-app purchases in App Store Connect
 /// with these exact product IDs:
-///   - com.grit.tip.small   → set the price tier to $0.99
-///   - com.grit.tip.medium  → set the price tier to $2.99
-///   - com.grit.tip.large   → set to any custom amount you prefer (e.g. $4.99)
+///   - com.grit.tip.small   → $0.99  (High Five!)
+///   - com.grit.tip.medium  → $2.99  (Small Coffee)
+///   - com.grit.tip.large   → $4.99  (Medium Coffee)
+///   - com.grit.tip.xlarge  → $9.99  (Large Coffee)
+///   - com.grit.tip.bag     → $14.99 (Bag o' Coffee)
+///   - com.grit.tip.crate   → $29.99 (Crate o' Coffee)
 @MainActor
 final class TipStore: ObservableObject {
     static let shared = TipStore()
@@ -15,7 +18,10 @@ final class TipStore: ObservableObject {
     static let productIDs: Set<String> = [
         "com.grit.tip.small",
         "com.grit.tip.medium",
-        "com.grit.tip.large"
+        "com.grit.tip.large",
+        "com.grit.tip.xlarge",
+        "com.grit.tip.bag",
+        "com.grit.tip.crate"
     ]
 
     @Published var products: [Product] = []
