@@ -26,7 +26,8 @@ struct ActivityEvent: Codable, Identifiable {
         case "mergerequest":
             return "\(action) MR: \(targetTitle ?? "!\(targetIID ?? targetID ?? 0)")"
         case "note", "discussionnote":
-            return "\(action): \(note?.body?.prefix(80) ?? targetTitle ?? "")"
+            let snippet = note?.body.map { String($0.prefix(80)) }
+            return "\(action): \(snippet ?? targetTitle ?? "")"
         case "milestone":
             return "\(action) milestone: \(targetTitle ?? "")"
         case "wiki":
