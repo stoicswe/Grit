@@ -714,15 +714,15 @@
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
 					14CA5E8DB2789EDB99A38C41 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = P22P7U46RW;
 						ProvisioningStyle = Automatic;
 					};
 					64C05BC3A89AAD707853BE6F = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = P22P7U46RW;
 						ProvisioningStyle = Automatic;
 					};
 					72742933C259FD0A0A89AFB6 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = P22P7U46RW;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -997,7 +997,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = P22P7U46RW;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -1096,7 +1096,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = P22P7U46RW;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
