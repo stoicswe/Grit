@@ -2,23 +2,21 @@
 //
 // bluesky-changelog.swift
 //
-// Uses Apple Intelligence (FoundationModels) to summarise the most notable
-// changes in a GitLab CI pipeline, then posts the result as a Bluesky thread.
+// Posts a changelog thread to Bluesky after a successful Xcode Cloud archive.
+// Tries Apple Intelligence (FoundationModels) for the summary; falls back to
+// a bullet list of commit subjects when the model isn't available — which is
+// the case on Xcode Cloud runners today.
 //
-// The first post always contains a link back to the pipeline. If the summary
-// is short enough it is included in that same post; otherwise the summary
-// continues in threaded replies.
+// Required environment variables (configure in App Store Connect →
+// Xcode Cloud → Workflow → Environment, marked Secret):
+//   BLUESKY_HANDLE        – e.g. grit-app.bsky.social
+//   BLUESKY_APP_PASSWORD  – Bluesky app password
 //
-// Required CI/CD variables (set in GitLab → Settings → CI/CD → Variables):
-//   BLUESKY_HANDLE        – Bluesky handle  (e.g. grit-app.bsky.social)
-//   BLUESKY_APP_PASSWORD  – App password     (Settings → App Passwords on Bluesky)
-//
-// Automatically available GitLab CI variables used:
-//   CI_PIPELINE_URL, CI_PIPELINE_IID, CI_PROJECT_NAME,
-//   CI_COMMIT_SHA, CI_COMMIT_BEFORE_SHA
+// Xcode Cloud variables consumed automatically:
+//   CI_BUILD_NUMBER, CI_COMMIT, CI_BRANCH, CI_TAG, CI_PRIMARY_REPOSITORY_PATH
 //
 // Optional:
-//   DRY_RUN=true  – print posts to stdout without publishing
+//   DRY_RUN=true          – print posts without publishing
 
 import Foundation
 import FoundationModels
@@ -71,34 +69,51 @@ func shell(_ command: String) -> String {
 
 // MARK: - Git
 
-/// Returns the commit log, diffstat, and a truncated diff for the changes in this pipeline.
-func gatherGitChanges(beforeSHA: String, commitSHA: String) -> (commits: String, diffStat: String, diff: String) {
-    let isFirstPush = beforeSHA.isEmpty || beforeSHA.allSatisfy { $0 == "0" }
+/// Returns commit log, diffstat, and a truncated diff for the changes in this build.
+/// Xcode Cloud doesn't expose a "previous commit" variable, so we diff against HEAD~1
+/// (or the last 20 commits on a shallow first build).
+func gatherGitChanges(commitSHA: String) -> (commits: String, diffStat: String, diff: String) {
+    let parentExists = shell("git rev-parse --verify --quiet \(commitSHA)~1").isEmpty == false
 
-    let logRange  = isFirstPush ? "-20"                              : "\(beforeSHA)..\(commitSHA)"
-    let diffRange = isFirstPush ? "\(commitSHA)~10..\(commitSHA)"    : "\(beforeSHA)..\(commitSHA)"
+    let logRange  = parentExists ? "\(commitSHA)~1..\(commitSHA)" : "-20"
+    let diffRange = parentExists ? "\(commitSHA)~1..\(commitSHA)" : "\(commitSHA)~10..\(commitSHA)"
 
     let commits  = shell("git log \(logRange) --pretty=format:'%h %s' 2>/dev/null")
     let diffStat = shell("git diff \(diffRange) --stat 2>/dev/null")
-    // Cap the raw diff so the AI prompt stays a reasonable size.
     let rawDiff  = shell("git diff \(diffRange) 2>/dev/null | head -500")
 
     return (commits, diffStat, String(rawDiff.prefix(8000)))
 }
 
+/// Best-effort GitHub commit URL derived from `git remote get-url origin`.
+/// Returns nil if the remote isn't a GitHub URL.
+func githubCommitURL(commitSHA: String) -> String? {
+    let remote = shell("git remote get-url origin 2>/dev/null")
+    guard !remote.isEmpty else { return nil }
+
+    // Normalise: git@github.com:owner/repo.git → https://github.com/owner/repo
+    var url = remote
+    if url.hasPrefix("git@github.com:") {
+        url = url.replacingOccurrences(of: "git@github.com:", with: "https://github.com/")
+    }
+    if url.hasSuffix(".git") {
+        url = String(url.dropLast(4))
+    }
+    guard url.contains("github.com/") else { return nil }
+    return "\(url)/commit/\(commitSHA)"
+}
+
 // MARK: - AI Summary (Apple Intelligence)
 
-/// Asks Foundation Models to produce a concise, social-media-friendly summary.
-/// Falls back to a bullet list of commit subjects if the model is unavailable.
-func generateSummary(commits: String, diffStat: String, diff: String, projectName: String) async -> String {
+func generateSummary(commits: String, diffStat: String, diff: String) async -> String {
     guard SystemLanguageModel.default.availability == .available else {
-        fputs("⚠️  Apple Intelligence is not available on this machine — using commit log fallback.\n", stderr)
+        fputs("⚠️  Apple Intelligence is not available on this runner — using commit log fallback.\n", stderr)
         return fallbackSummary(commits)
     }
 
     let instructions = """
     You are a developer-relations writer creating a social media changelog \
-    post for "\(projectName)", an iOS GitLab client app.
+    post for "Grit", an iOS GitLab client app.
 
     Guidelines:
     - Write 2-4 concise bullet points about the most notable changes.
@@ -136,7 +151,6 @@ func generateSummary(commits: String, diffStat: String, diff: String, projectNam
     }
 }
 
-/// Simple bullet-list of commit subjects used when AI is unavailable.
 func fallbackSummary(_ commits: String) -> String {
     let lines = commits
         .components(separatedBy: "\n")
@@ -148,8 +162,6 @@ func fallbackSummary(_ commits: String) -> String {
 
 // MARK: - Text Splitting (grapheme-aware)
 
-/// Splits `text` into chunks of at most `maxGraphemes` grapheme clusters,
-/// preferring paragraph → sentence → word boundaries.
 func splitIntoChunks(_ text: String, maxGraphemes: Int) -> [String] {
     guard text.count > maxGraphemes else { return [text] }
 
@@ -164,26 +176,22 @@ func splitIntoChunks(_ text: String, maxGraphemes: Int) -> [String] {
 
         let candidate = String(remaining.prefix(maxGraphemes))
 
-        // Prefer paragraph break
         if let r = candidate.range(of: "\n\n", options: .backwards) {
             chunks.append(String(remaining[remaining.startIndex..<r.lowerBound]))
             remaining = String(remaining[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
             continue
         }
-        // Then sentence break
         if let r = candidate.range(of: ". ", options: .backwards) {
             let end = remaining.index(after: r.lowerBound)
             chunks.append(String(remaining[remaining.startIndex..<end]))
             remaining = String(remaining[end...]).trimmingCharacters(in: .whitespacesAndNewlines)
             continue
         }
-        // Then word break
         if let r = candidate.range(of: " ", options: .backwards) {
             chunks.append(String(remaining[remaining.startIndex..<r.lowerBound]))
             remaining = String(remaining[r.upperBound...])
             continue
         }
-        // Hard split (very long unbroken token — unlikely)
         chunks.append(candidate)
         remaining = String(remaining.dropFirst(maxGraphemes))
     }
@@ -195,23 +203,27 @@ func splitIntoChunks(_ text: String, maxGraphemes: Int) -> [String] {
 
 typealias PostEntry = (text: String, facets: [[String: Any]])
 
-/// Builds an array of (text, facets) tuples ready for publishing.
-/// The first entry always contains the pipeline link.
-func buildThread(summary: String, pipelineURL: String, pipelineIID: String) -> [PostEntry] {
+func buildThread(summary: String, buildNumber: String, commitURL: String?) -> [PostEntry] {
     let maxChars = 300
-    let header   = "🛠️ Grit Build #\(pipelineIID)"
-    let linkLine = "\(pipelineURL)"
+    let header   = "🛠️ Grit Build #\(buildNumber)"
 
-    // Attempt a single post: header + summary + link
-    let single = "\(header)\n\n\(summary)\n\n🔗 \(linkLine)"
+    let linkLine: String
+    if let url = commitURL { linkLine = "🔗 \(url)" } else { linkLine = "" }
+
+    let single = linkLine.isEmpty
+        ? "\(header)\n\n\(summary)"
+        : "\(header)\n\n\(summary)\n\n\(linkLine)"
+
     if single.count <= maxChars {
-        return [(text: single, facets: makeLinkFacets(in: single, url: pipelineURL))]
+        return [(text: single, facets: commitURL.map { makeLinkFacets(in: single, url: $0) } ?? [])]
     }
 
-    // Multi-post thread: first post is the announcement + link
-    let first = "\(header) — What's New 🧵\n\n🔗 \(linkLine)"
+    let first = linkLine.isEmpty
+        ? "\(header) — What's New 🧵"
+        : "\(header) — What's New 🧵\n\n\(linkLine)"
+
     var thread: [PostEntry] = [
-        (text: first, facets: makeLinkFacets(in: first, url: pipelineURL))
+        (text: first, facets: commitURL.map { makeLinkFacets(in: first, url: $0) } ?? [])
     ]
 
     for chunk in splitIntoChunks(summary, maxGraphemes: maxChars) {
@@ -221,7 +233,6 @@ func buildThread(summary: String, pipelineURL: String, pipelineIID: String) -> [
     return thread
 }
 
-/// Creates a Bluesky rich-text link facet for the given URL inside `text`.
 func makeLinkFacets(in text: String, url: String) -> [[String: Any]] {
     guard let range = text.range(of: url) else { return [] }
     let byteStart = text[text.startIndex..<range.lowerBound].utf8.count
@@ -234,7 +245,6 @@ func makeLinkFacets(in text: String, url: String) -> [[String: Any]] {
 
 // MARK: - Bluesky API
 
-/// Authenticates with Bluesky and returns `(did, accessJwt)`.
 func blueskyAuth(handle: String, password: String) async throws -> (did: String, jwt: String) {
     let url = URL(string: "https://bsky.social/xrpc/com.atproto.server.createSession")!
     var request = URLRequest(url: url)
@@ -259,7 +269,6 @@ func blueskyAuth(handle: String, password: String) async throws -> (did: String,
     return (did, jwt)
 }
 
-/// Publishes a single post and returns a reference to it (for threading).
 func blueskyPost(
     did: String, jwt: String,
     text: String, facets: [[String: Any]],
@@ -312,18 +321,15 @@ func blueskyPost(
 
 func main() async throws {
     // ── 1. Configuration ────────────────────────────────────────────────
-    let pipelineURL  = try requiredEnv("CI_PIPELINE_URL")
-    let pipelineIID  = try requiredEnv("CI_PIPELINE_IID")
-    let projectName  = env("CI_PROJECT_NAME") ?? "Grit"
-    let commitSHA    = try requiredEnv("CI_COMMIT_SHA")
-    let beforeSHA    = env("CI_COMMIT_BEFORE_SHA") ?? ""
+    let buildNumber  = try requiredEnv("CI_BUILD_NUMBER")
+    let commitSHA    = try requiredEnv("CI_COMMIT")
     let bskyHandle   = try requiredEnv("BLUESKY_HANDLE")
     let bskyPassword = try requiredEnv("BLUESKY_APP_PASSWORD")
     let dryRun       = env("DRY_RUN") == "true"
 
     // ── 2. Gather changes ───────────────────────────────────────────────
     print("📋 Gathering git changes…")
-    let (commits, diffStat, diff) = gatherGitChanges(beforeSHA: beforeSHA, commitSHA: commitSHA)
+    let (commits, diffStat, diff) = gatherGitChanges(commitSHA: commitSHA)
 
     guard !commits.isEmpty else {
         print("ℹ️  No commits found in range — skipping Bluesky post.")
@@ -331,13 +337,12 @@ func main() async throws {
     }
 
     // ── 3. AI summary ───────────────────────────────────────────────────
-    print("🤖 Generating summary with Apple Intelligence…")
-    let summary = await generateSummary(
-        commits: commits, diffStat: diffStat, diff: diff, projectName: projectName
-    )
+    print("🤖 Generating summary…")
+    let summary = await generateSummary(commits: commits, diffStat: diffStat, diff: diff)
 
     // ── 4. Build thread ─────────────────────────────────────────────────
-    let thread = buildThread(summary: summary, pipelineURL: pipelineURL, pipelineIID: pipelineIID)
+    let commitURL = githubCommitURL(commitSHA: commitSHA)
+    let thread = buildThread(summary: summary, buildNumber: buildNumber, commitURL: commitURL)
     print("📝 Prepared \(thread.count) post\(thread.count == 1 ? "" : "s")")
 
     // ── 5. Dry-run output ───────────────────────────────────────────────

@@ -53,8 +53,7 @@ targets:
         INFOPLIST_FILE: Grit/Info.plist
         CODE_SIGN_ENTITLEMENTS: Grit/Grit.entitlements
         ENABLE_USER_SCRIPT_SANDBOXING: "NO"
-        CODE_SIGN_STYLE: Manual
-        PROVISIONING_PROFILE_SPECIFIER: "match AppStore com.stoicswe.grit.app"
+        CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
 
   GritWidget:
@@ -80,8 +79,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.stoicswe.grit.app.GritWidget
         INFOPLIST_FILE: GritWidget/Info.plist
         CODE_SIGN_ENTITLEMENTS: GritWidget/GritWidget.entitlements
-        CODE_SIGN_STYLE: Manual
-        PROVISIONING_PROFILE_SPECIFIER: "match AppStore com.stoicswe.grit.app.GritWidget"
+        CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../../Frameworks"
@@ -98,6 +96,5 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.stoicswe.grit.app.GritShareExtension
         INFOPLIST_FILE: GritShareExtension/Info.plist
-        CODE_SIGN_STYLE: Manual
-        PROVISIONING_PROFILE_SPECIFIER: "match AppStore com.stoicswe.grit.app.GritShareExtension"
+        CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
