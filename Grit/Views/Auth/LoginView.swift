@@ -19,17 +19,21 @@ struct LoginView: View {
 
     var body: some View {
         // ── Transition ZStack — safe-area-aware layout root ─────────────────
-        // Backgrounds live in .background{} so they never affect the safe area
-        // geometry that the content views see.  Because this ZStack is a stable
-        // node in the view tree, HelloWorldBackground retains its @State (and
-        // keeps animating) across the landing ↔ advanced transition.
+        // Background views live as stable bottom siblings of the same ZStack
+        // (rather than inside `.background { ... }`).  On iOS 26 real devices,
+        // a `GeometryReader` + `.task` placed inside a `.background` closure can
+        // be deferred or never fire, leaving HelloWorldBackground frozen with
+        // zero bubbles.  Keeping it as a normal sibling guarantees its lifecycle
+        // hooks run, while `.ignoresSafeArea()` on each background layer keeps
+        // the safe-area geometry seen by the foreground content unaffected.
         ZStack {
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
+            HelloWorldBackground()
+                .ignoresSafeArea()
+
             if navigateToAdvanced {
-                AdvancedLoginView(onBack: {
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
-                        navigateToAdvanced = false
-                    }
-                })
+                AdvancedLoginView(onBack: { navigateToAdvanced = false })
                     // Slides in from the right; slides back out to the right.
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             } else {
@@ -39,15 +43,15 @@ struct LoginView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Persistent backdrop: lives on the stable ZStack so it survives the
-        // content swap without resetting.
-        .background {
-            ZStack {
-                Color(.systemGroupedBackground)
-                HelloWorldBackground()
-            }
-            .ignoresSafeArea()
-        }
+        // Drive the landing ↔ advanced transition from a value-based animation
+        // on the parent ZStack rather than `withAnimation` at the call sites.
+        // On iOS 26 real devices, a `withAnimation` block executed inside an
+        // `.onTapGesture` action does not always propagate to view-tree
+        // transitions, leaving the inserted view stuck at its initial offset
+        // (off-screen right with opacity 0) — i.e., the page seems to never
+        // appear.  Observing `navigateToAdvanced` here makes the transition
+        // run unconditionally whenever the value flips.
+        .animation(.spring(response: 0.42, dampingFraction: 0.88), value: navigateToAdvanced)
         .animation(.spring(duration: 0.3), value: errorMessage)
         .sheet(isPresented: $showGitLabInfo) {
             GitLabLoginInfoSheet()
@@ -182,6 +186,7 @@ struct LoginView: View {
                     }
                 }
                 .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .regularGlassEffect(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -193,6 +198,12 @@ struct LoginView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
             .buttonStyle(.plain)
+            // Re-declare the hit shape on the Button itself.  On iOS 26 real
+            // devices, a contentShape applied only inside the label is sometimes
+            // ignored when the label hosts a Liquid Glass effect — taps land on
+            // the glass overlay and never reach the button.  This outer
+            // contentShape guarantees the full row width receives touches.
+            .contentShape(Rectangle())
             .disabled(isLoggingIn || !gitLabComOAuthReady)
 
             // Info button
@@ -210,44 +221,49 @@ struct LoginView: View {
 
     private var advancedLoginRow: some View {
         HStack(spacing: 10) {
-            // Navigation card
-            Button {
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
-                    navigateToAdvanced = true
+            // Navigation card.  Implemented with onTapGesture (not Button) on
+            // purpose: on iOS 26 real devices, a Button whose label hosts a
+            // Liquid Glass effect can fail to register taps entirely (the glass
+            // overlay swallows touches before the Button gesture sees them).
+            // A plain tap gesture on the row content sidesteps the interaction
+            // entirely and reliably fires on every device.
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.secondary.opacity(0.12))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: "ellipsis.rectangle.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 18, weight: .medium))
                 }
-            } label: {
-                HStack(spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.secondary.opacity(0.12))
-                            .frame(width: 42, height: 42)
-                        Image(systemName: "ellipsis.rectangle.fill")
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 18, weight: .medium))
-                    }
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Login another way")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.primary)
-                        Text("Custom instance or access token")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Login another way")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text("Custom instance or access token")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                .padding(16)
-                .regularGlassEffect(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                // Declare the full card shape as the hit-test area so the entire
-                // surface is tappable, not just the visually-filled content pixels.
-                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .regularGlassEffect(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .onTapGesture {
+                // Plain assignment — the parent ZStack carries an
+                // `.animation(value: navigateToAdvanced)` modifier that runs
+                // the transition.  See comment on the parent for why a
+                // `withAnimation` block is unreliable here on iOS 26.
+                navigateToAdvanced = true
+            }
+            .sensoryFeedback(.selection, trigger: navigateToAdvanced)
 
             // Info button
             Button { showAdvancedInfo = true } label: {
