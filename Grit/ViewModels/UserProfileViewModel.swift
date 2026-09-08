@@ -50,7 +50,8 @@ final class UserProfileViewModel: ObservableObject {
 
     // MARK: - Load
 
-    func load(userID: Int) async {
+    /// - Parameter force: bypass the cache freshness window.
+    func load(userID: Int, force: Bool = false) async {
         guard let token = auth.accessToken else { return }
 
         if let cached = readCache(for: userID) {
@@ -59,7 +60,10 @@ final class UserProfileViewModel: ObservableObject {
             groups      = cached.groups
             followers   = cached.followers
             isFollowing = cached.user.isFollowing ?? false
-            scheduleBackgroundRefresh(userID: userID, token: token)
+            // Four requests per open — skip them while the snapshot is fresh.
+            if force || cached.isStale {
+                scheduleBackgroundRefresh(userID: userID, token: token)
+            }
             return
         }
 
@@ -127,6 +131,8 @@ final class UserProfileViewModel: ObservableObject {
             } else {
                 _ = try await api.followUser(userID: userID, baseURL: auth.baseURL, token: token)
             }
+            // Drop the snapshot so the next open re-fetches the follow state.
+            UserDefaults.standard.removeObject(forKey: cacheKey(for: userID))
         } catch {
             isFollowing = wasFollowing
             self.error  = error.localizedDescription

@@ -52,16 +52,27 @@ final class ProfileViewModel: ObservableObject {
 
     // MARK: - Load
 
+    /// Events younger than this (measured from the last successful fetch) are
+    /// not re-fetched when the tab merely re-appears.
+    private let freshWindow: TimeInterval = 5 * 60
+    private var lastFetched: Date?
+    /// Events from the last fetch, kept so the next refresh can be incremental.
+    private var knownEvents: [ContributionEvent] = []
+
     /// Call on every appearance.
-    /// • Already have data → silent background refresh only (no shimmer)
+    /// • Already have data → silent background refresh only if stale (no shimmer)
     /// • Cache hit         → populate immediately + silent background refresh
     /// • Cold start        → full shimmer load
-    func load() async {
+    /// - Parameter force: bypass the freshness window (pull-to-refresh).
+    func load(force: Bool = false) async {
         guard let token = auth.accessToken else { return }
 
         if user != nil {
-            // Revisiting the tab — just refresh silently
-            scheduleBackgroundRefresh(token: token)
+            // Revisiting the tab — refresh silently, but only when stale.
+            // Every tab switch used to re-download a year of events.
+            if force || lastFetched.map({ Date().timeIntervalSince($0) > freshWindow }) ?? true {
+                scheduleBackgroundRefresh(token: token)
+            }
             return
         }
 
@@ -69,8 +80,12 @@ final class ProfileViewModel: ObservableObject {
             user             = cached.user
             ownedRepositories = cached.repos
             followers        = cached.followers
+            knownEvents      = cached.events
+            lastFetched      = cached.savedAt
             contributionStats = ContributionStats.build(from: cached.events)
-            scheduleBackgroundRefresh(token: token)
+            if force || cached.isStale {
+                scheduleBackgroundRefresh(token: token)
+            }
             return
         }
 
@@ -102,9 +117,11 @@ final class ProfileViewModel: ObservableObject {
         do {
             async let userTask      = api.fetchCurrentUser(baseURL: baseURL, token: token)
             async let reposTask     = api.fetchUserRepositories(baseURL: baseURL, token: token)
-            async let eventsTask    = fetchAllEvents(username: username,
-                                                     baseURL: baseURL, token: token)
+            async let eventsTask    = fetchEventsIncrementally(username: username,
+                                                               baseURL: baseURL, token: token)
             let (fetchedUser, repos, events) = try await (userTask, reposTask, eventsTask)
+            knownEvents = events
+            lastFetched = Date()
 
             // Followers fetched after we have the user ID
             let fetchedFollowers = (try? await api.fetchUserFollowers(
@@ -147,14 +164,57 @@ final class ProfileViewModel: ObservableObject {
         WidgetDataStore.save(snapshot)
     }
 
-    private func fetchAllEvents(username: String,
-                                 baseURL: String,
-                                 token: String) async throws -> [ContributionEvent] {
+    /// Fetches contribution events for the trailing year.
+    ///
+    /// The first load pulls the full year (up to 50 pages for very active
+    /// accounts). Subsequent refreshes only ask GitLab for events after the
+    /// newest one already known (minus a two-day overlap, since the API's
+    /// `after` filter is date-granular) and merge them in by ID — typically a
+    /// single small page instead of the whole year again.
+    private func fetchEventsIncrementally(username: String,
+                                          baseURL: String,
+                                          token: String) async throws -> [ContributionEvent] {
         guard !username.isEmpty else { return [] }
-        let oneYearAgo = Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
-        return try await api.fetchUserEvents(username: username,
-                                             baseURL: baseURL,
-                                             token: token,
-                                             after: oneYearAgo)
+        let calendar   = Calendar.current
+        let oneYearAgo = calendar.date(byAdding: .year, value: -1, to: Date()) ?? Date()
+
+        // Drop anything that has aged out of the one-year window.
+        let retained = knownEvents.filter { event in
+            guard let date = Self.eventDate(event) else { return false }
+            return date >= oneYearAgo
+        }
+
+        let newestKnown = retained.compactMap(Self.eventDate).max()
+        let since: Date
+        if let newestKnown, !retained.isEmpty {
+            since = max(oneYearAgo, calendar.date(byAdding: .day, value: -2, to: newestKnown) ?? newestKnown)
+        } else {
+            since = oneYearAgo
+        }
+
+        let fresh = try await api.fetchUserEvents(username: username,
+                                                  baseURL: baseURL,
+                                                  token: token,
+                                                  after: since)
+        guard !retained.isEmpty else { return fresh }
+
+        var seen   = Set(fresh.map(\.id))
+        var merged = fresh
+        for event in retained where !seen.contains(event.id) {
+            seen.insert(event.id)
+            merged.append(event)
+        }
+        return merged
+    }
+
+    private static let eventDateFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let eventDatePlain = ISO8601DateFormatter()
+
+    private static func eventDate(_ event: ContributionEvent) -> Date? {
+        eventDateFractional.date(from: event.createdAt) ?? eventDatePlain.date(from: event.createdAt)
     }
 }

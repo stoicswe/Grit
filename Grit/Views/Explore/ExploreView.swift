@@ -56,7 +56,7 @@ struct ExploreView: View {
                 await viewModel.loadTrending(refresh: true)
                 await starVM.loadIfNeeded()
             }
-            .refreshable { await viewModel.loadTrending(refresh: true) }
+            .refreshable { await viewModel.loadTrending(refresh: true, force: true) }
             .navigationDestination(for: Repository.self) { repo in
                 RepositoryDetailView(repository: repo)
                     .environmentObject(navState)

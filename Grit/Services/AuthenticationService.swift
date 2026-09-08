@@ -116,8 +116,19 @@ final class AuthenticationService: ObservableObject {
     /// The user is only redirected to login if the session is definitively invalid
     /// and cannot be recovered — transient network failures are ignored so a brief
     /// loss of connectivity never logs the user out.
+    /// Timestamp of the last successful foreground validation. Rapid app
+    /// switching (e.g. copying a token from another app) shouldn't re-fetch
+    /// `/user` every few seconds.
+    private var lastForegroundValidation: Date?
+    private let foregroundValidationInterval: TimeInterval = 90
+
     func refreshSessionOnForeground() async {
         guard isAuthenticated else { return }
+        if let last = lastForegroundValidation,
+           Date().timeIntervalSince(last) < foregroundValidationInterval,
+           !isOAuthTokenExpiredOrSoon() {
+            return
+        }
 
         // ── Step 1: proactively rotate an expiring OAuth token ─────────────
         if isOAuthTokenExpiredOrSoon() {
@@ -142,6 +153,7 @@ final class AuthenticationService: ObservableObject {
                 baseURL: savedURL, token: token)
             currentUser = user   // refresh stale profile data in the background
             writeCachedUser(user)
+            lastForegroundValidation = Date()
         } catch let urlError as URLError where isTransientNetworkError(urlError) {
             // No connectivity — stay logged in; individual views will surface
             // their own errors when the user tries to load data.
@@ -201,6 +213,13 @@ final class AuthenticationService: ObservableObject {
 
     func logout() {
         clearCachedUser()   // must run before baseURL is reset so the key resolves correctly
+        // Drop every cached API response so the next account never sees this
+        // account's repositories, README text, ETag bodies or avatars.
+        Task {
+            await RepoCacheStore.shared.invalidateAll()
+            await GitLabAPIService.shared.clearTransientCaches()
+            await ImageLoader.shared.clearAll()
+        }
         keychain.clearAll()
         UserDefaults.standard.removeObject(forKey: expiryKey)
         // Signal OAuthService to use an ephemeral browser session on the next

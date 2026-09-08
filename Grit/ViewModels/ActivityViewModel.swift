@@ -77,6 +77,14 @@ final class ActivityViewModel: ObservableObject {
     /// Cancellable handle for the background starred-events fetch.
     private var starredFetchTask: Task<Void, Never>?
 
+    /// Re-opening the sheet within this window reuses what was just fetched.
+    private let freshWindow: TimeInterval = 90
+    /// The starred feed costs one request per starred repo (up to 15) — refresh
+    /// it less often than the four cheap feed calls.
+    private let starredFreshWindow: TimeInterval = 5 * 60
+    private var lastLoaded:        Date?
+    private var lastStarredLoaded: Date?
+
     // MARK: - Lookups
 
     func projectName(for id: Int?) -> String? {
@@ -124,15 +132,22 @@ final class ActivityViewModel: ObservableObject {
 
     // MARK: - Load
 
-    func load() async {
-        // Cancel any in-flight starred fetch so a fresh pull-to-refresh starts clean.
-        starredFetchTask?.cancel()
-
+    /// - Parameter force: bypass the freshness windows (pull-to-refresh / retry).
+    func load(force: Bool = false) async {
         // Show cached data immediately so the UI is never blank on refresh.
-        restoreFromCache()
+        if feedEvents.isEmpty && yourEvents.isEmpty { restoreFromCache() }
 
         guard let token = auth.accessToken,
               let currentUser = auth.currentUser else { return }
+
+        if !force, let last = lastLoaded,
+           Date().timeIntervalSince(last) < freshWindow,
+           !(feedEvents.isEmpty && yourEvents.isEmpty) {
+            return
+        }
+
+        // Cancel any in-flight starred fetch so a fresh pull-to-refresh starts clean.
+        starredFetchTask?.cancel()
 
         // Show the skeleton only when there is truly nothing to display yet.
         isLoading = feedEvents.isEmpty && yourEvents.isEmpty
@@ -183,14 +198,20 @@ final class ActivityViewModel: ObservableObject {
         }
 
         // Save fast-data snapshot so the next open is instant.
+        lastLoaded = Date()
         saveToCache()
 
         // ── Background: starred events (non-blocking) ─────────────────────────
         // Fired as a detached task so load() returns here, letting .refreshable
         // complete its spinner immediately rather than waiting for 15+ fetches.
+        let starredStale = lastStarredLoaded.map {
+            Date().timeIntervalSince($0) > starredFreshWindow
+        } ?? true
+        guard force || starredStale || starredEvents.isEmpty else { return }
         starredFetchTask = Task { [weak self] in
             guard let self else { return }
             await self.refreshStarredInBackground(baseURL: baseURL, token: token)
+            self.lastStarredLoaded = Date()
         }
     }
 

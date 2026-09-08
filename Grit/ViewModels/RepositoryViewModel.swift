@@ -125,7 +125,16 @@ final class RepositoryViewModel: ObservableObject {
 
     // MARK: - Repository List
 
-    func loadRepositories(refresh: Bool = false) async {
+    /// Page-1 cache entries younger than this are served without a network
+    /// call when the tab (re)appears. Pull-to-refresh and the 90 s background
+    /// loop still hit the network, so the list never drifts far.
+    private let listFreshWindow: TimeInterval = 60
+
+    /// - Parameters:
+    ///   - refresh: `true` reloads page 1 (tab appear / pull-to-refresh);
+    ///     `false` loads the next page.
+    ///   - force: bypass the fresh-cache short-circuit (pull-to-refresh).
+    func loadRepositories(refresh: Bool = false, force: Bool = false) async {
         guard let token = auth.accessToken else { return }
 
         if refresh {
@@ -133,16 +142,25 @@ final class RepositoryViewModel: ObservableObject {
             currentPage  = 1
             hasMore      = true
             isPaginating = false
-            // Reload groups in parallel on every full refresh.
+            // Reload groups in parallel on every full refresh (cache-gated inside).
             Task { await loadGroups() }
 
             // ── Stale-while-revalidate for the repo list ───────────────────
             // If we have any cached page 1 (even expired), show it instantly so
             // the user sees content immediately rather than a blank loading screen.
             // The network result will replace it moments later, silently.
-            if let cached: [Repository] = await cache.get(.repoList(page: 1), allowStale: true),
-               !cached.isEmpty {
-                withAnimation(.easeOut(duration: 0.25)) { repositories = cached }
+            if let cached: (value: [Repository], age: TimeInterval, isFresh: Bool) =
+                await cache.getWithAge(.repoList(page: 1), allowStale: true),
+               !cached.value.isEmpty {
+                if repositories.isEmpty {
+                    withAnimation(.easeOut(duration: 0.25)) { repositories = cached.value }
+                }
+                // Tab re-appeared moments after the last load — nothing to do.
+                if !force, cached.age < listFreshWindow, !repositories.isEmpty {
+                    hasMore     = cached.value.count == 20
+                    currentPage = 2
+                    return
+                }
                 // No loading spinner — cached data is already showing.
             } else {
                 isLoading = true
@@ -197,6 +215,9 @@ final class RepositoryViewModel: ObservableObject {
             if repositories.isEmpty {
                 self.error = error.localizedDescription
             }
+            // Don't let the load-more row re-fire a failing page forever;
+            // pull-to-refresh resets `hasMore`.
+            if !refresh { hasMore = false }
         }
     }
 
@@ -208,12 +229,10 @@ final class RepositoryViewModel: ObservableObject {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(90))
             guard !Task.isCancelled else { break }
+            // One request; the ETag layer turns an unchanged list into a 304.
+            // (The previous per-tick root-tree sweep over every cached repo was
+            // removed — the file browser refreshes its own listing on open.)
             await silentlyRefreshList()
-            // Check cached root trees for top-level file/folder changes
-            let reposSnapshot = repositories
-            Task(priority: .background) {
-                await RepoPrefetchService.shared.checkRootTreesForUpdates(repos: reposSnapshot)
-            }
         }
     }
 
@@ -318,41 +337,60 @@ final class RepositoryDetailViewModel: ObservableObject {
     // MARK: - Background Polling
 
     private var pollingTask: Task<Void, Never>?
-    /// How often branches and MRs are silently refreshed while the repo view is open.
-    private let pollIntervalSeconds: TimeInterval = 30
 
-    /// Starts a background loop that silently refreshes branches and open MRs
-    /// every `pollIntervalSeconds` while the user is on this view.
+    /// Base tick for the poll loop. Each data point refreshes on its own
+    /// multiple of this tick so the important, fast-moving state (a running
+    /// pipeline) stays live while slow-moving state (branches) isn't
+    /// re-fetched needlessly. Every request also carries `If-None-Match`, so an
+    /// unchanged response is a bodiless 304.
+    private static let pollTick: Duration = .seconds(15)
+    private static let pipelineActiveEvery = 1   // 15 s while running / pending
+    private static let pipelineIdleEvery   = 2   // 30 s otherwise
+    private static let mrsEvery            = 4   // 60 s
+    private static let branchesEvery       = 12  // 3 min
+
+    /// Starts a background loop that silently refreshes the pipeline badge,
+    /// open MRs and branches at staggered intervals while the user is on this view.
     /// Cancel with `stopPolling()` when the view disappears.
     func startPolling(projectID: Int) {
         stopPolling()
         pollingTask = Task { [weak self] in
             guard let self else { return }
+            var tick = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(pollIntervalSeconds))
+                try? await Task.sleep(for: Self.pollTick)
                 guard !Task.isCancelled, let token = auth.accessToken else { break }
+                tick += 1
 
-                // Branches — silent update, does not touch selectedBranch or commits
-                if let fresh = try? await api.fetchBranches(
-                    projectID: projectID, baseURL: auth.baseURL, token: token
-                ) {
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.85)) {
-                        branches = fresh
+                // Pipeline — the one data point that must be live.
+                let pipelineEvery = defaultBranchPipeline?.isActive == true
+                    ? Self.pipelineActiveEvery : Self.pipelineIdleEvery
+                if tick % pipelineEvery == 0, let branch = selectedBranch {
+                    let fresh = try? await api.fetchLatestPipeline(
+                        projectID: projectID, ref: branch,
+                        baseURL: auth.baseURL, token: token
+                    )
+                    if fresh?.id != defaultBranchPipeline?.id ||
+                       fresh?.status != defaultBranchPipeline?.status {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            self.defaultBranchPipeline = fresh
+                        }
                     }
-                    await cache.set(fresh, for: .branches(projectID: projectID),
-                                    ttl: RepoCacheStore.branchesTTL)
-                    await writeDetailBundle(projectID: projectID,
-                                            freshBranches: fresh, freshMRs: nil)
+                    knownHasPipeline = fresh != nil
                 }
 
                 guard !Task.isCancelled else { break }
 
                 // MRs — silent update
-                if let fresh = try? await api.fetchMergeRequests(
-                    projectID: projectID, baseURL: auth.baseURL, token: token
-                ) {
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.85)) {
-                        mergeRequests = fresh
+                if tick % Self.mrsEvery == 0,
+                   let fresh = try? await api.fetchMergeRequests(
+                        projectID: projectID, baseURL: auth.baseURL, token: token
+                   ) {
+                    if fresh.map(\.id) != mergeRequests.map(\.id) ||
+                       fresh.map(\.updatedAt) != mergeRequests.map(\.updatedAt) {
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.85)) {
+                            self.mergeRequests = fresh
+                        }
                     }
                     await cache.set(fresh, for: .mrList(projectID: projectID),
                                     ttl: RepoCacheStore.mrListTTL)
@@ -362,16 +400,21 @@ final class RepositoryDetailViewModel: ObservableObject {
 
                 guard !Task.isCancelled else { break }
 
-                // Pipeline — always poll so the badge stays live
-                if let branch = selectedBranch {
-                    let fresh = try? await api.fetchLatestPipeline(
-                        projectID: projectID, ref: branch,
-                        baseURL: auth.baseURL, token: token
-                    )
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        defaultBranchPipeline = fresh
+                // Branches — silent update, does not touch selectedBranch or commits
+                if tick % Self.branchesEvery == 0,
+                   let fresh = try? await api.fetchBranches(
+                        projectID: projectID, baseURL: auth.baseURL, token: token
+                   ) {
+                    if fresh.map(\.name) != branches.map(\.name) ||
+                       fresh.map(\.commit?.id) != branches.map(\.commit?.id) {
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.85)) {
+                            self.branches = fresh
+                        }
                     }
-                    knownHasPipeline = fresh != nil
+                    await cache.set(fresh, for: .branches(projectID: projectID),
+                                    ttl: RepoCacheStore.branchesTTL)
+                    await writeDetailBundle(projectID: projectID,
+                                            freshBranches: fresh, freshMRs: nil)
                 }
             }
         }
@@ -406,9 +449,9 @@ final class RepositoryDetailViewModel: ObservableObject {
         guard let token = auth.accessToken else { return }
 
         // ── Serve cache immediately (stale-while-revalidate) ──────────────
-        let cachedDetail: CachedRepoDetail? = await cache.get(
-            .repoDetail(projectID: projectID), allowStale: true
-        )
+        let cachedEntry: (value: CachedRepoDetail, age: TimeInterval, isFresh: Bool)? =
+            await cache.getWithAge(.repoDetail(projectID: projectID), allowStale: true)
+        let cachedDetail = cachedEntry?.value
         if let cached = cachedDetail {
             withAnimation(.easeOut(duration: 0.25)) {
                 repository     = cached.repository
@@ -431,6 +474,18 @@ final class RepositoryDetailViewModel: ObservableObject {
 
         error = nil
         defer { withAnimation(.easeOut(duration: 0.25)) { isLoading = false } }
+
+        // ── Fresh bundle: refresh only the live pipeline badge ─────────────
+        // Bouncing between the list and a repo opened moments ago used to cost
+        // six requests each time. If the bundle was written within the fresh
+        // window (by this view, the prefetcher, or background refresh) the
+        // metadata, branches, MRs and commits are current enough; the poll loop
+        // picks up any change within a minute.
+        if let entry = cachedEntry, entry.age < RepoCacheStore.repoDetailFreshWindow,
+           entry.value.selectedBranch != nil {
+            await refreshLiveState(projectID: projectID, token: token)
+            return
+        }
 
         // ── Network refresh ───────────────────────────────────────────────
         async let repoTask     = api.fetchRepository(
@@ -471,24 +526,21 @@ final class RepositoryDetailViewModel: ObservableObject {
             async let pipelineTask     = api.fetchLatestPipeline(
                 projectID: projectID, ref: branch,
                 baseURL: auth.baseURL, token: token)
-            async let notifTask        = api.fetchProjectNotificationLevel(
-                projectID: projectID, baseURL: auth.baseURL, token: token)
+            async let notifTask        = loadNotificationLevel(projectID: projectID, token: token)
 
             let freshCommits   = (try? await commitsTask)  ?? []
             let latestPipeline =  try? await pipelineTask
-            let notifLevel     =  try? await notifTask
+            let notifLevel     =  await notifTask
 
             withAnimation(.spring(response: 0.38, dampingFraction: 0.85)) {
                 commits               = freshCommits
                 defaultBranchPipeline = latestPipeline
             }
-            notificationLevel    = notifLevel?.level
+            notificationLevel    = notifLevel
             isPipelineLoading    = false
             knownHasPipeline     = latestPipeline != nil
         } else {
-            notificationLevel = (try? await api.fetchProjectNotificationLevel(
-                projectID: projectID, baseURL: auth.baseURL, token: token
-            ))?.level
+            notificationLevel = await loadNotificationLevel(projectID: projectID, token: token)
         }
 
         // ── Write the full detail bundle to cache ─────────────────────────
@@ -510,6 +562,37 @@ final class RepositoryDetailViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Refreshes only the data that must be current on every open: the default
+    /// branch pipeline badge and the (cached) notification level.
+    private func refreshLiveState(projectID: Int, token: String) async {
+        guard let branch = selectedBranch else { return }
+        isPipelineLoading = defaultBranchPipeline == nil
+        async let pipelineTask = api.fetchLatestPipeline(
+            projectID: projectID, ref: branch, baseURL: auth.baseURL, token: token)
+        async let notifTask    = loadNotificationLevel(projectID: projectID, token: token)
+
+        let latestPipeline = try? await pipelineTask
+        notificationLevel  = await notifTask
+        withAnimation(.easeOut(duration: 0.25)) { defaultBranchPipeline = latestPipeline }
+        isPipelineLoading = false
+        knownHasPipeline  = latestPipeline != nil
+    }
+
+    /// The user's notification level for a project changes only when they
+    /// toggle it (which updates the cache) — so it is safe to cache for a while.
+    private func loadNotificationLevel(projectID: Int, token: String) async -> String? {
+        if let cached: ProjectNotificationLevel =
+            await cache.get(.notificationLevel(projectID: projectID)) {
+            return cached.level
+        }
+        guard let fresh = try? await api.fetchProjectNotificationLevel(
+            projectID: projectID, baseURL: auth.baseURL, token: token
+        ) else { return nil }
+        await cache.set(fresh, for: .notificationLevel(projectID: projectID),
+                        ttl: RepoCacheStore.notifLevelTTL)
+        return fresh.level
     }
 
     // MARK: - Load Commits (branch switch)
@@ -561,6 +644,11 @@ final class RepositoryDetailViewModel: ObservableObject {
                 token: token
             )
             notificationLevel = result.level
+            await cache.set(result, for: .notificationLevel(projectID: repo.id),
+                            ttl: RepoCacheStore.notifLevelTTL)
+            // The watched list is derived from these levels — drop it so the
+            // next Watching-tab load rebuilds it.
+            await cache.invalidate(.watchedList)
 
             // Immediately sync the shared Watching list so the tab updates
             // without requiring a manual refresh.

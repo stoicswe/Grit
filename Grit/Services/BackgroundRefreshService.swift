@@ -79,9 +79,26 @@ final class BackgroundRefreshService {
     ///
     /// Runs at background priority; errors for individual projects are swallowed so
     /// a single failing project does not abort the whole pass.
+    /// Upper bound on repos refreshed per background wake. The access tracker
+    /// ranks them, so the ones the user is likely to open next come first.
+    private static let maxMRRefreshRepos = 5
+
     private func refreshMRsForCachedRepos(token: String, baseURL: String) async {
-        let cache      = RepoCacheStore.shared
-        let projectIDs = await cache.cachedProjectIDs()
+        let cache     = RepoCacheStore.shared
+        let cachedIDs = Set(await cache.cachedProjectIDs())
+        guard !cachedIDs.isEmpty else { return }
+
+        // Previously every repo with a detail file on disk (up to the cache's
+        // file limit) was refreshed on every wake. Rank by predicted relevance
+        // and skip repos whose MR list is still within TTL.
+        let ranked = await RepoAccessTracker.shared.topPredicted(count: Self.maxMRRefreshRepos * 2)
+            .map(\.repoID)
+            .filter { cachedIDs.contains($0) }
+        var projectIDs: [Int] = []
+        for id in ranked where projectIDs.count < Self.maxMRRefreshRepos {
+            let fresh: [MergeRequest]? = await cache.get(.mrList(projectID: id))
+            if fresh == nil { projectIDs.append(id) }
+        }
         guard !projectIDs.isEmpty else { return }
 
         await withTaskGroup(of: Void.self) { group in

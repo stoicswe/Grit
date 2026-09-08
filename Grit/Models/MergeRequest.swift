@@ -24,6 +24,17 @@ struct MergeRequest: Codable, Identifiable, Hashable {
     let draft: Bool?
     let hasConflicts: Bool?
     let mergeStatus: String?
+    /// Fine-grained mergeability (`mergeable`, `conflict`, `ci_must_pass`, …).
+    /// Replaces the deprecated `merge_status`.
+    let detailedMergeStatus: String?
+    /// Whether commits will be squashed on merge (the MR-level setting).
+    let squash: Bool?
+    /// Effective squash decision including the project's squash option.
+    let squashOnMerge: Bool?
+    /// Whether the source branch will be deleted after merge (MR-level setting).
+    let shouldRemoveSourceBranch: Bool?
+    /// Project settings force source-branch deletion after merge.
+    let forceRemoveSourceBranch: Bool?
     /// Project this MR belongs to — always present in API responses.
     let projectID: Int
     /// Full reference string, e.g. "group/project!42". Used in Inbox for project context.
@@ -109,6 +120,11 @@ struct MergeRequest: Codable, Identifiable, Hashable {
         case diffRefs = "diff_refs"
         case hasConflicts = "has_conflicts"
         case mergeStatus = "merge_status"
+        case detailedMergeStatus = "detailed_merge_status"
+        case squash
+        case squashOnMerge = "squash_on_merge"
+        case shouldRemoveSourceBranch = "should_remove_source_branch"
+        case forceRemoveSourceBranch = "force_remove_source_branch"
         case projectID = "project_id"
         case references
         case headPipeline = "head_pipeline"

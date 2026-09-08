@@ -8,15 +8,12 @@ struct AvatarView: View {
     var body: some View {
         Group {
             if let urlString, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure, .empty:
-                        placeholderView
-                    @unknown default:
-                        placeholderView
-                    }
+                // Memory + disk cached — the same avatar across a list of notes
+                // or events is decoded once and never re-downloaded while fresh.
+                CachedAsyncImage(url: url) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    placeholderView
                 }
             } else {
                 placeholderView

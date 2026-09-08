@@ -82,6 +82,45 @@ Grit/
 └── Resources/
 ```
 
+## Network & Caching
+
+Grit is deliberately frugal with the GitLab API so the app stays fast on a phone and never trips the rate limiter.
+
+**Transport layer** (`GitLabAPIService`)
+- **ETag revalidation** — every `GET` response carrying an `ETag` is kept in memory; the next identical request sends `If-None-Match` and an unchanged resource comes back as a bodiless `304`. All polling loops rely on this, so an idle screen costs bytes, not kilobytes.
+- **In-flight coalescing** — concurrent requests for the same URL share one network call.
+- **Concurrency gate** — at most 8 requests run at once; large fan-outs queue instead of bursting.
+- **429 handling** — `Retry-After` is honoured once.
+- **Membership list fallback** — GitLab.com's 15 s statement timeout can make `GET /projects?membership=true&order_by=last_activity_at` answer HTTP 500 for some accounts. The fetch falls through to cheaper query variants (`order_by=id`, then `min_access_level`) and remembers the working one per host for a day. List endpoints never request `statistics=true`; only single-project fetches do, with a fallback.
+- **Debug tracing** — in Debug builds every request is logged under subsystem `com.stoicswe.grit`, category `api` (`→` request, `←` status/bytes/latency; a `304` means the ETag revalidation saved a download).
+
+**Cache layer** (`RepoCacheStore`, memory + disk, per-entry TTL)
+- Repository detail bundles, branches, commits, MR lists, groups, starred and watched lists, root trees, READMEs, contributors, project labels, member access levels and notification levels.
+- Views serve stale data instantly and revalidate in the background (stale-while-revalidate). A detail bundle written in the last two minutes skips the metadata refetch entirely and only refreshes the live pipeline badge.
+- Cache-first helpers live in `RepoContentLoader` / `ProjectAccessCache`; avatars go through `ImageLoader` (`CachedAsyncImage`).
+- Everything is cleared on logout.
+
+**Apple Intelligence routing** (`AIAssistantService`)
+- Callers describe a task as `.quick` or `.intricate`; the service picks the model. Quick tasks (README summary, short snippets) run on the on-device model. Intricate tasks (MR review, commit explanations with diffs, large files, repo-context questions, squash-commit drafts) use Apple's Private Cloud Compute model on iOS 27+ when available, otherwise on-device. Each path falls back to the other on failure, and prompts are trimmed to the chosen model's context via `contextBudget(for:)`.
+- The cloud model only exists in the iOS 27 SDK, so that code is behind `#if compiler(>=6.4)`; the project still builds with Xcode 26. The on-device "Core Advanced" variant is chosen by the system automatically; there is no API to request it.
+- Cloud routing is **off until the app is entitled**. `PrivateCloudComputeLanguageModel` aborts the process (not a thrown error) without Apple's managed `com.apple.developer.private-cloud-compute` entitlement. Request it at https://developer.apple.com/contact/request/private-cloud-compute/, add it to `Grit/Grit.entitlements`, then set `GritPrivateCloudComputeEnabled` to `true` in `project.yml`. Until then every task runs on-device.
+
+**Polling cadence** (foreground only; all requests ETag-revalidated)
+
+| Screen | What | Interval |
+|---|---|---|
+| Repository detail | pipeline badge | 15 s while running, 30 s idle |
+| Repository detail | open MRs | 60 s |
+| Repository detail | branches | 3 min |
+| Inbox (visible) | MRs, issues, tasks, todos | 60 s |
+| Inbox (hidden) | todos only (badge + banners) | 60 s |
+| Repository list | page 1 | 90 s |
+| Starred | list | 2 min |
+
+Tab re-appearances reuse fresh cache (60 s for the repo list, 5 min for Explore/Profile); pull-to-refresh always hits the network.
+
+---
+
 ## Requirements
 
 | Requirement | Version |

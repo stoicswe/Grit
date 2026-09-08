@@ -59,6 +59,12 @@ struct GritApp: App {
                 view.environment(\.dynamicTypeSize, size)
             }
             .task {
+                // Create the cache directories off the main thread so first
+                // use of the stores doesn't do file I/O during launch.
+                Task.detached(priority: .utility) {
+                    _ = RepoCacheStore.shared
+                    _ = ImageLoader.shared
+                }
                 await notificationService.requestAuthorization()
                 // Queue both background tasks as soon as the app is running.
                 BackgroundRefreshService.shared.scheduleNextRefresh()

@@ -29,7 +29,8 @@ struct RepoInfoTabView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task {
-            await vm.load(projectID: repository.id, ref: branch)
+            await vm.load(projectID: repository.id, ref: branch,
+                          readmeURL: repository.readmeURL)
         }
         .sheet(isPresented: $showAllContributors) {
             ContributorsSheet(contributors: vm.contributors)

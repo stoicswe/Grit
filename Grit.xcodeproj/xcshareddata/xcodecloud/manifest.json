@@ -1,0 +1,9 @@
+{
+  "id" : "baf87b78-848f-42ea-b07a-b89771305489",
+  "targets" : [
+    {
+      "id" : "7DA8D85D-3EE1-4C16-85B9-42F966251462",
+      "name" : "Grit for GitLab"
+    }
+  ]
+}

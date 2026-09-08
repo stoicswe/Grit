@@ -42,6 +42,10 @@ Grit includes an optional **Report an Issue** feature in Settings. If you choose
 
 Grit communicates exclusively with the GitLab instance you configure (e.g., `gitlab.com` or your self-hosted server). No data is shared with any other third-party service.
 
+### Apple Intelligence (optional)
+
+If you turn on Apple Intelligence features in Settings, prompts (for example a commit diff or a file you ask about) are processed by Apple's Foundation Models. Quick tasks run entirely on your device. On iOS 27 and later, in-depth tasks such as merge request reviews or large diffs may be processed by Apple's **Private Cloud Compute**, which runs on Apple silicon servers, is designed so that Apple cannot access your data, and does not retain requests. Grit never sends this content anywhere else, and the feature is off by default.
+
 ## Children's Privacy
 
 Grit does not knowingly collect any personal information from anyone, including children under the age of 13.

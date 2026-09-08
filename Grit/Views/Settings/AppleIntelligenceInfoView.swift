@@ -141,7 +141,7 @@ Key characteristics of Foundation Models:
                 privacyRow(
                     icon: "iphone.and.arrow.forward",
                     title: "Stays on your device",
-                    detail: "All prompts, code, and responses are processed locally by the on-device model. Nothing is sent over the network."
+                    detail: "Quick tasks are processed locally by the on-device model. On iOS 27, in-depth tasks (reviews, large diffs) may use Apple's Private Cloud Compute, which runs on Apple silicon servers, is cryptographically verifiable, and never stores your requests."
                 )
                 Divider().padding(.leading, 44)
                 privacyRow(
@@ -153,13 +153,13 @@ Key characteristics of Foundation Models:
                 privacyRow(
                     icon: "eye.slash",
                     title: "Not used to train models",
-                    detail: "Your queries are never collected or used to improve Apple's models. On-device processing means Apple never sees what you ask."
+                    detail: "Your queries are never collected or used to improve Apple's models, whether processed on-device or on Private Cloud Compute."
                 )
                 Divider().padding(.leading, 44)
                 privacyRow(
                     icon: "hand.raised.fill",
                     title: "No third-party AI",
-                    detail: "Grit does not use OpenAI, Anthropic, Google, or any external AI API. The only model involved is Apple's on-device Foundation Model."
+                    detail: "Grit does not use OpenAI, Anthropic, Google, or any external AI API. The only models involved are Apple's Foundation Models, on-device or on Private Cloud Compute."
                 )
                 Divider().padding(.leading, 44)
                 privacyRow(
@@ -199,7 +199,7 @@ The AI can explain what a commit changes or give a plain-language summary of a m
 **Comment Translation**
 When you open an issue, Grit automatically detects the language of each comment using on-device language recognition. If a comment is in a different language than your device, a Translate button appears. Tapping it uses Apple's on-device translation to render the comment in your language — no network request is made.
 
-In every case, your code and questions are processed entirely on-device. Grit sends no data to any external service.
+Your code and questions are processed on-device, or for in-depth tasks on iOS 27, by Apple's Private Cloud Compute. Grit sends no data to any other service.
 """
         )
     }

@@ -98,11 +98,13 @@ final class CreateIssueViewModel: ObservableObject {
         isLoadingProject    = true
         defer { isLoadingProject = false }
         guard let token = auth.accessToken else { return }
-        async let labels  = try? api.fetchProjectLabels(
+        // Labels come from the shared per-project cache (also used by the
+        // issue detail label picker).
+        async let labels  = ProjectAccessCache.labels(
             projectID: repo.id, baseURL: auth.baseURL, token: token)
         async let members = try? api.fetchProjectMembers(
             projectID: repo.id, baseURL: auth.baseURL, token: token)
-        availableLabels  = await labels  ?? []
+        availableLabels  = await labels
         availableMembers = await members ?? []
     }
 
@@ -133,6 +135,9 @@ final class CreateIssueViewModel: ObservableObject {
                     baseURL:   auth.baseURL,
                     token:     token
                 )
+            }
+            if !newLabelNames.isEmpty {
+                await ProjectAccessCache.invalidateLabels(projectID: project.id)
             }
 
             let cleanTitle = issueTitle.trimmingCharacters(in: .whitespacesAndNewlines)

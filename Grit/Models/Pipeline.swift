@@ -92,6 +92,17 @@ struct Pipeline: Codable, Identifiable, Hashable {
     let webURL:    String?
     let createdAt: Date?
 
+    /// True while the pipeline can still change state — used to poll faster.
+    var isActive: Bool {
+        switch status {
+        case "running", "pending", "created", "preparing",
+             "waiting_for_resource", "scheduled", "manual":
+            return true
+        default:
+            return false
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, status, ref
         case webURL    = "web_url"

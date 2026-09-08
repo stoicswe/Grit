@@ -311,8 +311,10 @@ struct RepositoryListView: View {
             }
         }
 
-        // Load-more trigger
-        if viewModel.hasMore {
+        // Load-more trigger — only once page 1 is on screen. With an empty
+        // list this row was visible immediately and re-fired the failed page-1
+        // request on every re-render.
+        if viewModel.hasMore && !viewModel.repositories.isEmpty {
             HStack { Spacer(); ProgressView(); Spacer() }
                 .listRowBackground(Color.clear)
                 .onAppear { Task { await viewModel.loadRepositories() } }
@@ -326,7 +328,7 @@ struct RepositoryListView: View {
         Section {
             ForEach(unstarred) { repo in repoRow(repo) }
 
-            if viewModel.hasMore {
+            if viewModel.hasMore && !viewModel.repositories.isEmpty {
                 HStack { Spacer(); ProgressView(); Spacer() }
                     .listRowBackground(Color.clear)
                     .onAppear { Task { await viewModel.loadRepositories() } }

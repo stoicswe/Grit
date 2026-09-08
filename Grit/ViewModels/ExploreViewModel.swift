@@ -188,7 +188,8 @@ final class ExploreViewModel: ObservableObject {
     ///   background `Task` silently fetches fresh data.
     /// - If no cache exists the shimmer overlay is shown and the fetch blocks
     ///   the caller until the first page arrives.
-    func loadTrending(refresh: Bool = false) async {
+    /// - Parameter force: bypass the 5-minute cache freshness window (pull-to-refresh).
+    func loadTrending(refresh: Bool = false, force: Bool = false) async {
         guard let token = auth.accessToken else { return }
 
         // ── Pagination (load next page) ───────────────────────────────────────
@@ -226,18 +227,22 @@ final class ExploreViewModel: ObservableObject {
 
         let cached = readCache(for: sort)
 
-        // Load top-4 public groups in parallel (non-fatal)
-        Task { await loadTopGroups() }
+        // Load top-4 public groups in parallel (non-fatal, freshness-gated)
+        Task { await loadTopGroups(force: force) }
 
         if let cached, !cached.projects.isEmpty {
             // Serve cache instantly — no visible loading state
             if projects.isEmpty {
                 // First visit: populate immediately so the list appears at once
-                projects = cached.projects
-                hasMore  = false   // pagination resets after background refresh
+                projects    = cached.projects
+                hasMore     = cached.projects.count == 25
+                currentPage = 2
             }
-            // Always kick a background refresh (cancel any in-flight one first)
-            scheduleBackgroundRefresh(token: token, currentSort: sort)
+            // Refresh in the background only when the snapshot is stale —
+            // switching tabs used to re-fetch the trending page every time.
+            if force || cached.isStale {
+                scheduleBackgroundRefresh(token: token, currentSort: sort)
+            }
         } else {
             // No cache: show full shimmer and await the first page
             isLoading = true
@@ -315,19 +320,28 @@ final class ExploreViewModel: ObservableObject {
         await loadTrending(refresh: true)
     }
 
+    private var lastGroupsLoad: (sort: ExploreSort, at: Date)?
+
     /// Fetches the top 4 public groups for the current sort and exposes them
     /// in `groups`. Non-fatal — a failure simply leaves `groups` empty.
-    func loadTopGroups() async {
+    func loadTopGroups(force: Bool = false) async {
         guard let token = auth.accessToken else { return }
+        if !force, !groups.isEmpty,
+           let last = lastGroupsLoad, last.sort == sort,
+           Date().timeIntervalSince(last.at) < 5 * 60 {
+            return
+        }
         isLoadingGroups = true
         defer { isLoadingGroups = false }
-        groups = (try? await api.fetchPublicGroups(
+        let fetched = (try? await api.fetchPublicGroups(
             orderBy: sort.groupOrderBy,
             baseURL: auth.baseURL,
             token:   token,
             page:    1,
             perPage: 4
         )) ?? []
+        if !fetched.isEmpty || groups.isEmpty { groups = fetched }
+        lastGroupsLoad = (sort, Date())
     }
 
     // MARK: - Search

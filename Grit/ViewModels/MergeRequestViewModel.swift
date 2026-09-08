@@ -31,13 +31,6 @@ private func isMRNotFound(_ error: Error) -> Bool {
     return true
 }
 
-/// Returns `true` when the error is specifically an HTTP 405.
-private func isMRMethodNotAllowed(_ error: Error) -> Bool {
-    guard let apiError = error as? GitLabAPIService.APIError,
-          case .httpError(405) = apiError else { return false }
-    return true
-}
-
 /// Retries `operation` up to `maxAttempts` times on transient errors only,
 /// with exponential back-off starting at `initialDelay` seconds (capped at 8 s).
 /// Non-retryable errors are re-thrown immediately on first failure.
@@ -72,6 +65,8 @@ private func mrFriendlyError(_ error: Error, context: String) -> String {
             return "You don't have permission to access this \(context)."
         case .httpError(405):
             return "This action isn't available for the \(context) in its current state."
+        case .httpError(406):
+            return "The \(context) can't be merged yet — check for conflicts, a failing pipeline, or unresolved threads."
         case .httpError(409):
             return "A conflict occurred — the \(context) state may have changed. Try refreshing."
         case .httpError(422):
@@ -178,16 +173,17 @@ final class MergeRequestViewModel: ObservableObject {
                 baseURL: baseURL, token: token
             )
         }
-        async let userFetch = self.api.fetchCurrentUser(baseURL: baseURL, token: token)
+        // The signed-in user is already known to AuthenticationService — no
+        // need for a `/user` round-trip on every MR open.
+        currentUserID = await resolveCurrentUserID(baseURL: baseURL, token: token)
 
         do {
             // Await the MR — if this fails the whole load fails with a clear message.
             let mr = try await mrFetch
             selectedMR = mr
 
-            // Notes and user are best-effort; failures degrade gracefully.
-            notes         = (try? await notesFetch) ?? []
-            currentUserID = (try? await userFetch)?.id
+            // Notes are best-effort; failures degrade gracefully.
+            notes = (try? await notesFetch) ?? []
         } catch {
             self.error = mrFriendlyError(error, context: "merge request")
         }
@@ -217,18 +213,21 @@ final class MergeRequestViewModel: ObservableObject {
             userHasApproved = approvals.userHasApproved
         }
 
-        // Merge capability — Developer (30+) access level required
-        if let user = try? await api.fetchCurrentUser(baseURL: baseURL, token: token) {
-            let member = try? await withMRRetry(maxAttempts: 2) {
-                try await self.api.fetchProjectMemberSelf(
-                    projectID: projectID, userID: user.id,
-                    baseURL: baseURL, token: token
-                )
-            }
-            if let member {
-                userCanMerge = member.accessLevel >= 30
-            }
+        // Merge capability — Developer (30+) access level required.
+        // Access level is cached: it changes only when an admin changes it.
+        if let userID = await resolveCurrentUserID(baseURL: baseURL, token: token),
+           let level = await ProjectAccessCache.accessLevel(
+                projectID: projectID, userID: userID, baseURL: baseURL, token: token
+           ) {
+            userCanMerge = level >= 30
         }
+    }
+
+    /// Prefers the cached signed-in user; falls back to `/user` only if the
+    /// session has no user yet (e.g. restored offline).
+    private func resolveCurrentUserID(baseURL: String, token: String) async -> Int? {
+        if let id = auth.currentUser?.id { return id }
+        return (try? await api.fetchCurrentUser(baseURL: baseURL, token: token))?.id
     }
 
     // MARK: - Diff
@@ -303,7 +302,14 @@ final class MergeRequestViewModel: ObservableObject {
         }
     }
 
-    func merge(projectID: Int, mrIID: Int) async {
+    /// User choices for the merge, collected by `MergeOptionsSheet`.
+    struct MergeOptions {
+        var squash: Bool
+        var squashCommitMessage: String?
+        var removeSourceBranch: Bool
+    }
+
+    func merge(projectID: Int, mrIID: Int, options: MergeOptions) async {
         guard let token = auth.accessToken else { return }
         isMerging = true
         defer { isMerging = false }
@@ -312,19 +318,17 @@ final class MergeRequestViewModel: ObservableObject {
 
         do {
             // Merge is destructive — one attempt only to avoid double-merge.
-            try await api.mergeMergeRequest(
+            let merged = try await api.mergeMergeRequest(
                 projectID: projectID, mrIID: mrIID,
+                squash: options.squash,
+                squashCommitMessage: options.squashCommitMessage,
+                removeSourceBranch: options.removeSourceBranch,
                 baseURL: baseURL, token: token
             )
-            updateLocalMergeState()
+            // The server's copy is the source of truth (state, merged_at, sha).
+            selectedMR = merged
         } catch {
-            if isMRMethodNotAllowed(error) {
-                // HTTP 405 most likely means the MR was merged concurrently —
-                // reflect the merged state locally rather than showing an error.
-                updateLocalMergeState()
-            } else {
-                self.error = mrFriendlyError(error, context: "merge request")
-            }
+            self.error = mrFriendlyError(error, context: "merge request")
         }
     }
 
@@ -352,44 +356,55 @@ final class MergeRequestViewModel: ObservableObject {
 
     // MARK: - AI
 
+    /// Asks Apple Intelligence for a squash-commit message based on the MR
+    /// title, description and the loaded diff. Returns `nil` when the model
+    /// is unavailable or fails — the sheet simply leaves the field empty.
+    func suggestSquashCommitMessage() async -> String? {
+        guard ai.isUserEnabled, let mr = selectedMR else { return nil }
+
+        // Per-file summary: status letter, path, +/- counts.
+        let summary = fileDiffs.prefix(40).map { file -> String in
+            let status = file.meta.newFile ? "A" : file.meta.deletedFile ? "D" : file.meta.renamedFile ? "R" : "M"
+            return "\(status) \(file.meta.displayPath) (+\(file.additions) −\(file.deletions))"
+        }.joined(separator: "\n")
+
+        return try? await ai.suggestSquashCommitMessage(
+            title: mr.title,
+            description: mr.description ?? "",
+            changeSummary: summary,
+            diff: diffExcerpt(budget: ai.contextBudget(for: .intricate) - 2_500)
+        )
+    }
+
+    /// Unified-diff excerpt within `budget` characters. The allowance is spread
+    /// across files so one large file doesn't crowd out the rest; binary and
+    /// oversized files are skipped.
+    private func diffExcerpt(budget: Int) -> String {
+        let usable = fileDiffs.filter { !$0.isBinaryOrEmpty && !$0.isTooLarge }
+        guard !usable.isEmpty, budget > 0 else { return "" }
+        let perFile = max(300, budget / usable.count)
+        var excerpt = ""
+        for file in usable where excerpt.count < budget {
+            let chunk = String(file.meta.diff.prefix(perFile))
+            excerpt += "--- \(file.meta.displayPath)\n\(chunk)\n"
+        }
+        return String(excerpt.prefix(budget))
+    }
+
     func requestAIReview() async {
         guard let mr = selectedMR else { return }
         isAILoading = true
         defer { isAILoading = false }
         do {
+            // The review previously received no diff at all — only the MR
+            // number. Pass as much of the real diff as the chosen model fits.
             aiReview = try await ai.reviewMergeRequest(
                 title: mr.title,
                 description: mr.description ?? "",
-                diff: "See merge request \(mr.iid)"
+                diff: diffExcerpt(budget: ai.contextBudget(for: .intricate) - 1_500)
             )
         } catch {
             aiReview = "AI review unavailable: \(error.localizedDescription)"
         }
-    }
-
-    // MARK: - Private helpers
-
-    /// Updates the local MR state to `.merged` without a full network reload.
-    private func updateLocalMergeState() {
-        guard let current = selectedMR else { return }
-        selectedMR = MergeRequest(
-            id: current.id, iid: current.iid,
-            title: current.title, description: current.description,
-            state: .merged,
-            author: current.author, assignee: current.assignee,
-            reviewers: current.reviewers,
-            sourceBranch: current.sourceBranch,
-            targetBranch: current.targetBranch,
-            createdAt: current.createdAt, updatedAt: current.updatedAt,
-            mergedAt: Date(), webURL: current.webURL,
-            upvotes: current.upvotes, downvotes: current.downvotes,
-            changesCount: current.changesCount,
-            diffRefs: current.diffRefs, labelDetails: current.labelDetails,
-            draft: current.draft, hasConflicts: current.hasConflicts,
-            mergeStatus: "merged",
-            projectID: current.projectID,
-            references: current.references,
-            headPipeline: current.headPipeline
-        )
     }
 }

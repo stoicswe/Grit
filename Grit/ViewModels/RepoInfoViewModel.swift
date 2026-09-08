@@ -20,18 +20,25 @@ final class RepoInfoViewModel: ObservableObject {
 
     // MARK: - Load
 
-    func load(projectID: Int, ref: String, pipeline: Pipeline? = nil) async {
+    /// - Parameter readmeURL: the project's `readme_url`; lets the README be
+    ///   fetched with a single request instead of probing candidate filenames.
+    func load(projectID: Int, ref: String, readmeURL: String? = nil,
+              pipeline: Pipeline? = nil) async {
         guard let token = auth.accessToken else { return }
-        isLoading = true
+        // Both values are cached — only show the skeleton when we have nothing.
+        isLoading = contributors.isEmpty && readmeContent == nil
         error     = nil
         defer { isLoading = false }
 
         // Fire off contributors (throwing) and README (non-throwing) concurrently.
-        async let contribsTask: [GitLabContributor] = api.fetchContributors(
+        // Both go through RepoContentLoader, so the detail view, info tab and
+        // info overlay share one cached copy instead of each fetching their own.
+        async let contribsTask: [GitLabContributor] = RepoContentLoader.contributors(
             projectID: projectID, baseURL: auth.baseURL, token: token
         )
-        async let readmeTask: String? = api.fetchReadme(
-            projectID: projectID, ref: ref, baseURL: auth.baseURL, token: token
+        async let readmeTask: String? = RepoContentLoader.readme(
+            projectID: projectID, ref: ref, readmeURL: readmeURL,
+            baseURL: auth.baseURL, token: token
         )
 
         do {
@@ -68,30 +75,16 @@ final class RepoInfoViewModel: ObservableObject {
             .count
         guard sentenceCount < 3 else { return }
 
-        #if canImport(FoundationModels)
-        if #available(iOS 26, *) {
-            guard SystemLanguageModel.default.isAvailable,
-                  SettingsStore.shared.appleIntelligenceEnabled else { return }
+        guard AIAssistantService.shared.isUserEnabled else { return }
 
-            isGeneratingSummary = true
-            defer { isGeneratingSummary = false }
+        isGeneratingSummary = true
+        defer { isGeneratingSummary = false }
 
-            let session = LanguageModelSession()
-            let truncatedReadme = String(readme.prefix(6000))
-            let prompt = """
-            Based on the following README, write exactly 6 sentences summarizing what \
-            this repository does, its key features, and its purpose. Write in plain \
-            prose with no bullet points, markdown, or headers. Do not repeat or \
-            rephrase the existing description: "\(description)".
-
-            README:
-            \(truncatedReadme)
-            """
-
-            if let response = try? await session.respond(to: prompt) {
-                readmeSummary = response.content
-            }
+        // Quick task — the service keeps it on-device.
+        if let summary = try? await AIAssistantService.shared.summarizeReadme(
+            description: description, readme: readme
+        ) {
+            readmeSummary = summary
         }
-        #endif
     }
 }

@@ -1,19 +1,82 @@
 import Foundation
+import os
 
 actor GitLabAPIService {
+    /// Debug-only request tracing. Filter in Console with subsystem `com.stoicswe.grit`, category `api`.
+    private static let log = Logger(subsystem: "com.stoicswe.grit", category: "api")
+
     static let shared = GitLabAPIService()
 
     private let session: URLSession
     private let decoder: JSONDecoder
 
+    // MARK: - Transport-level caches
+    //
+    // Three mechanisms sit between callers and the network:
+    //
+    // 1. **ETag revalidation** — every GET response carrying an `ETag` is kept
+    //    in memory keyed by URL. The next GET for that URL sends `If-None-Match`;
+    //    a `304 Not Modified` reply has no body, so polling an unchanged list
+    //    costs a few hundred bytes instead of re-downloading and re-decoding
+    //    tens of kilobytes of JSON.
+    //
+    // 2. **In-flight coalescing** — concurrent GETs for the same URL share one
+    //    network call (e.g. the detail view, the prefetcher and the file browser
+    //    all asking for the same root tree within the same second).
+    //
+    // 3. **Concurrency gate** — at most `maxConcurrentRequests` requests run at
+    //    once. Fan-outs such as the watched-repo scan or an eight-way search
+    //    queue politely instead of opening hundreds of sockets and tripping
+    //    GitLab's rate limiter.
+
+    private struct ETagEntry {
+        let etag:     String
+        let data:     Data
+        let storedAt: Date
+    }
+
+    private var etagCache: [String: ETagEntry] = [:]
+    private var etagBytes  = 0
+    private let maxETagBytes = 12 * 1024 * 1024        // ~12 MB of raw JSON bodies
+    private let etagMaxAge: TimeInterval = 6 * 60 * 60 // drop revalidation data after 6 h
+
+    private var inFlight: [String: Task<Data, Error>] = [:]
+
+    private let maxConcurrentRequests = 8
+    private var activeRequests = 0
+    private var slotWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// Lightweight counters for debugging network usage (see `currentMetrics()`).
+    struct Metrics: Sendable {
+        var requests        = 0   // network round-trips actually performed
+        var notModifiedHits = 0   // 304 replies served from the ETag cache
+        var coalescedHits   = 0   // calls that piggy-backed on an in-flight request
+        var rateLimited     = 0   // 429 responses encountered
+    }
+    private(set) var metrics = Metrics()
+
+    /// Snapshot of the transport counters.
+    func currentMetrics() -> Metrics { metrics }
+
+    /// Drops the ETag bodies and any per-session transport state.
+    /// Called on logout so a different account never revalidates against
+    /// another user's cached responses.
+    func clearTransientCaches() {
+        etagCache.removeAll()
+        etagBytes = 0
+        metrics   = Metrics()
+    }
+
     private init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
+        config.httpMaximumConnectionsPerHost = 8
         // Prevent URLSession from intercepting 304 Not Modified responses and
         // substituting a stale cached body. GitLab uses 304 as a semantic signal
         // (e.g. "already starred / already unstarred") — we need to see the real
-        // status code, not a cache-promoted 200 with old data.
+        // status code, not a cache-promoted 200 with old data. ETag revalidation
+        // is handled explicitly in `performGET` instead.
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.urlCache = nil
         session = URLSession(configuration: config)
@@ -22,22 +85,28 @@ actor GitLabAPIService {
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let string = try container.decode(String.self)
-
-            let withFractional = ISO8601DateFormatter()
-            withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-            let withoutFractional = ISO8601DateFormatter()
-            withoutFractional.formatOptions = [.withInternetDateTime]
-
-            if let date = withFractional.date(from: string) { return date }
-            if let date = withoutFractional.date(from: string) { return date }
-
+            if let date = Self.iso8601Fractional.date(from: string) { return date }
+            if let date = Self.iso8601Plain.date(from: string) { return date }
             throw DecodingError.dataCorruptedError(
                 in: container,
                 debugDescription: "Cannot parse date: \(string)"
             )
         }
     }
+
+    // Shared, immutable formatters. `ISO8601DateFormatter` is thread-safe and
+    // comparatively expensive to construct; the previous implementation built
+    // two of them for every single date field decoded.
+    private static let iso8601Fractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let iso8601Plain: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
 
     // MARK: - Failable array element wrapper
 
@@ -48,6 +117,26 @@ actor GitLabAPIService {
         let value: T?
         init(from decoder: Decoder) throws {
             value = try? T(from: decoder)
+        }
+    }
+
+    // MARK: - Concurrency gate
+
+    private func acquireSlot() async {
+        if activeRequests < maxConcurrentRequests {
+            activeRequests += 1
+            return
+        }
+        // The slot is handed over directly by `releaseSlot`, so the count is
+        // not incremented here.
+        await withCheckedContinuation { slotWaiters.append($0) }
+    }
+
+    private func releaseSlot() {
+        if !slotWaiters.isEmpty {
+            slotWaiters.removeFirst().resume()
+        } else {
+            activeRequests -= 1
         }
     }
 
@@ -63,41 +152,139 @@ actor GitLabAPIService {
         if !queryItems.isEmpty { components.queryItems = queryItems }
         guard let url = components.url else { throw APIError.invalidURL }
 
+        let data = try await getData(url: url, token: token)
+        return try decoder.decode(T.self, from: data)
+    }
+
+    /// Coalescing wrapper: identical concurrent GETs share one `performGET`.
+    private func getData(url: URL, token: String) async throws -> Data {
+        let key = url.absoluteString
+        if let running = inFlight[key] {
+            metrics.coalescedHits += 1
+            return try await running.value
+        }
+        let task = Task<Data, Error> {
+            try await self.performGET(url: url, token: token)
+        }
+        inFlight[key] = task
+        defer { inFlight[key] = nil }
+        return try await task.value
+    }
+
+    /// Performs a single authenticated GET with ETag revalidation, one silent
+    /// OAuth refresh on 401, and one `Retry-After`-aware retry on 429.
+    private func performGET(url: URL, token: String) async throws -> Data {
+        let key = url.absoluteString
+
         var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-
-        let (data, response) = try await session.data(for: req)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
+        if let entry = etagCache[key] {
+            if Date().timeIntervalSince(entry.storedAt) < etagMaxAge {
+                req.setValue(entry.etag, forHTTPHeaderField: "If-None-Match")
+            } else {
+                evictETag(key)
+            }
         }
+
+        var (data, httpResponse) = try await send(req)
 
         // On 401, attempt a silent OAuth token refresh and retry the request once.
         // This covers the case where the app was backgrounded long enough for the
         // 2-hour GitLab OAuth token to expire without the proactive foreground-resume
         // refresh having had a chance to run.
         if httpResponse.statusCode == 401 {
-            if let newToken = await AuthenticationService.shared.refreshTokenUnconditionally() {
-                var retryReq = req
-                retryReq.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
-                let (retryData, retryResponse) = try await session.data(for: retryReq)
-                guard let retryHTTP = retryResponse as? HTTPURLResponse else {
-                    throw APIError.invalidResponse
-                }
-                guard (200...299).contains(retryHTTP.statusCode) else {
-                    throw APIError.httpError(retryHTTP.statusCode)
-                }
-                return try decoder.decode(T.self, from: retryData)
+            guard let newToken = await AuthenticationService.shared.refreshTokenUnconditionally() else {
+                throw APIError.httpError(401)
             }
-            throw APIError.httpError(401)
+            var retryReq = req
+            retryReq.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+            (data, httpResponse) = try await send(retryReq)
+        }
+
+        // GitLab rate limiting — honour Retry-After once (capped at 10 s).
+        if httpResponse.statusCode == 429 {
+            metrics.rateLimited += 1
+            let retryAfter = Double(httpResponse.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 2
+            try await Task.sleep(for: .seconds(min(max(retryAfter, 1), 10)))
+            (data, httpResponse) = try await send(req)
+        }
+
+        if httpResponse.statusCode == 304 {
+            if let entry = etagCache[key] {
+                metrics.notModifiedHits += 1
+                // Still valid — keep frequently polled entries from ageing out.
+                etagCache[key] = ETagEntry(etag: entry.etag, data: entry.data, storedAt: Date())
+                return entry.data
+            }
+            // Cached body was evicted between the header being set and the reply —
+            // fetch unconditionally so the caller always gets a body.
+            req.setValue(nil, forHTTPHeaderField: "If-None-Match")
+            (data, httpResponse) = try await send(req)
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
             throw APIError.httpError(httpResponse.statusCode)
         }
 
-        return try decoder.decode(T.self, from: data)
+        if let etag = httpResponse.value(forHTTPHeaderField: "ETag"), !etag.isEmpty {
+            storeETag(etag, data: data, for: key)
+        }
+        return data
+    }
+
+    private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let path = (request.url?.path ?? "?") + (request.url?.query.map { "?" + $0 } ?? "")
+        #if DEBUG
+        if activeRequests >= maxConcurrentRequests {
+            Self.log.debug("queued \(path, privacy: .public) (active: \(self.activeRequests))")
+        }
+        #endif
+        await acquireSlot()
+        defer { releaseSlot() }
+        metrics.requests += 1
+        #if DEBUG
+        let started = Date()
+        Self.log.debug("→ \(request.httpMethod ?? "GET", privacy: .public) \(path, privacy: .public)")
+        #endif
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+            #if DEBUG
+            let ms = Int(Date().timeIntervalSince(started) * 1000)
+            Self.log.debug("← \(http.statusCode) \(path, privacy: .public) \(data.count) B in \(ms) ms")
+            #endif
+            return (data, http)
+        } catch {
+            #if DEBUG
+            Self.log.debug("✗ \(path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            #endif
+            throw error
+        }
+    }
+
+    // MARK: - ETag bookkeeping
+
+    private func storeETag(_ etag: String, data: Data, for key: String) {
+        // Don't bother revalidating huge bodies (job logs, big diffs); the
+        // memory is better spent on the many small list responses.
+        guard data.count <= 512 * 1024 else { evictETag(key); return }
+        evictETag(key)
+        etagCache[key] = ETagEntry(etag: etag, data: data, storedAt: Date())
+        etagBytes += data.count
+        if etagBytes > maxETagBytes { pruneETags() }
+    }
+
+    private func evictETag(_ key: String) {
+        if let old = etagCache.removeValue(forKey: key) {
+            etagBytes -= old.data.count
+        }
+    }
+
+    private func pruneETags() {
+        // Drop the oldest half by insertion time.
+        let sorted = etagCache.sorted { $0.value.storedAt < $1.value.storedAt }
+        for (key, _) in sorted.prefix(sorted.count / 2) { evictETag(key) }
     }
 
     private func post<T: Decodable, B: Encodable>(
@@ -117,19 +304,15 @@ actor GitLabAPIService {
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await session.data(for: req)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
+        let (data, httpResponse) = try await send(req)
 
         if httpResponse.statusCode == 401 {
             if let newToken = await AuthenticationService.shared.refreshTokenUnconditionally() {
                 var retryReq = req
                 retryReq.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
-                let (retryData, retryResponse) = try await session.data(for: retryReq)
-                guard let retryHTTP = retryResponse as? HTTPURLResponse,
-                      (200...299).contains(retryHTTP.statusCode) else {
-                    throw APIError.invalidResponse
+                let (retryData, retryHTTP) = try await send(retryReq)
+                guard (200...299).contains(retryHTTP.statusCode) else {
+                    throw APIError.httpError(retryHTTP.statusCode)
                 }
                 return try decoder.decode(T.self, from: retryData)
             }
@@ -137,7 +320,7 @@ actor GitLabAPIService {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
+            throw APIError.httpError(httpResponse.statusCode)
         }
         return try decoder.decode(T.self, from: data)
     }
@@ -156,19 +339,13 @@ actor GitLabAPIService {
         req.httpMethod = method
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        var (_, response) = try await session.data(for: req)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
+        let (_, httpResponse) = try await send(req)
 
         if httpResponse.statusCode == 401 {
             if let newToken = await AuthenticationService.shared.refreshTokenUnconditionally() {
                 var retryReq = req
                 retryReq.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
-                (_, response) = try await session.data(for: retryReq)
-                guard let retryHTTP = response as? HTTPURLResponse else {
-                    throw APIError.invalidResponse
-                }
+                let (_, retryHTTP) = try await send(retryReq)
                 let retryCode = retryHTTP.statusCode
                 guard (200...299).contains(retryCode) || extraSuccessCodes.contains(retryCode) else {
                     throw APIError.httpError(retryCode)
@@ -295,19 +472,92 @@ actor GitLabAPIService {
 
     // MARK: - Repositories
 
+    /// Query variants for the member-projects list, preferred first.
+    ///
+    /// GitLab.com enforces a 15 s database statement timeout; for some accounts
+    /// the `membership=true` + `order_by=last_activity_at` query trips it and
+    /// the API answers HTTP 500 after ~15 s, every time. When that happens the
+    /// next variant is tried, and the one that works is remembered per host
+    /// (re-probed after a day in case the server side improves).
+    private static let memberProjectVariants: [[URLQueryItem]] = [
+        [URLQueryItem(name: "membership", value: "true"),
+         URLQueryItem(name: "order_by",   value: "last_activity_at"),
+         URLQueryItem(name: "sort",       value: "desc")],
+        [URLQueryItem(name: "membership", value: "true"),
+         URLQueryItem(name: "order_by",   value: "id"),
+         URLQueryItem(name: "sort",       value: "desc")],
+        [URLQueryItem(name: "min_access_level", value: "10"),
+         URLQueryItem(name: "order_by",         value: "id"),
+         URLQueryItem(name: "sort",             value: "desc")]
+    ]
+    private static let variantReprobeInterval: TimeInterval = 24 * 60 * 60
+
+    private func memberVariantKey(_ baseURL: String) -> String {
+        "grit.api.memberProjectVariant.\(URL(string: baseURL)?.host ?? baseURL)"
+    }
+
+    private func rememberedMemberVariant(baseURL: String) -> Int {
+        let defaults = UserDefaults.standard
+        let key = memberVariantKey(baseURL)
+        let savedAt = defaults.double(forKey: key + ".at")
+        guard savedAt > 0,
+              Date().timeIntervalSince(Date(timeIntervalSince1970: savedAt)) < Self.variantReprobeInterval
+        else { return 0 }
+        return min(defaults.integer(forKey: key), Self.memberProjectVariants.count - 1)
+    }
+
+    private func rememberMemberVariant(_ index: Int, baseURL: String) {
+        let key = memberVariantKey(baseURL)
+        UserDefaults.standard.set(index, forKey: key)
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key + ".at")
+    }
+
+    /// Fetches one page of the projects the user is a member of, falling back
+    /// through `memberProjectVariants` on a 5xx. Shared by the repository list,
+    /// the activity feed and the watched-repos scan.
+    private func fetchMemberProjectsPage(
+        perPage: Int,
+        page: Int,
+        baseURL: String,
+        token: String
+    ) async throws -> [Repository] {
+        let paging = [
+            URLQueryItem(name: "per_page", value: "\(perPage)"),
+            URLQueryItem(name: "page",     value: "\(page)")
+        ]
+        let remembered = rememberedMemberVariant(baseURL: baseURL)
+        var index = remembered
+        var lastError: Error = APIError.invalidResponse
+        while index < Self.memberProjectVariants.count {
+            do {
+                let repos: [Repository] = try await request(
+                    "projects", baseURL: baseURL, token: token,
+                    queryItems: Self.memberProjectVariants[index] + paging
+                )
+                if index != remembered {
+                    Self.log.info("member projects: query variant \(index) works; remembering it")
+                    rememberMemberVariant(index, baseURL: baseURL)
+                }
+                return repos
+            } catch APIError.httpError(let code) where code >= 500 {
+                Self.log.error("member projects: query variant \(index) → HTTP \(code), trying next")
+                lastError = APIError.httpError(code)
+                index += 1
+            }
+        }
+        throw lastError
+    }
+
     func fetchUserRepositories(
         baseURL: String,
         token: String,
         page: Int = 1
     ) async throws -> [Repository] {
-        return try await request("projects", baseURL: baseURL, token: token, queryItems: [
-            URLQueryItem(name: "membership", value: "true"),
-            URLQueryItem(name: "order_by", value: "last_activity_at"),
-            URLQueryItem(name: "sort", value: "desc"),
-            URLQueryItem(name: "per_page", value: "20"),
-            URLQueryItem(name: "page", value: "\(page)"),
-            URLQueryItem(name: "statistics", value: "true")
-        ])
+        // No `statistics=true` here: GitLab computes storage statistics for
+        // every project in the page, which is slow and can push the request
+        // over the statement timeout. Statistics are fetched per project by
+        // `fetchRepository` instead.
+        try await fetchMemberProjectsPage(perPage: 20, page: page, baseURL: baseURL, token: token)
     }
 
     /// Returns all GitLab groups the current user is a member of (any access level).
@@ -336,8 +586,7 @@ actor GitLabAPIService {
         return try await request("projects", baseURL: baseURL, token: token, queryItems: [
             URLQueryItem(name: "search", value: query),
             URLQueryItem(name: "order_by", value: "last_activity_at"),
-            URLQueryItem(name: "per_page", value: "25"),
-            URLQueryItem(name: "statistics", value: "true")
+            URLQueryItem(name: "per_page", value: "25")
         ])
     }
 
@@ -484,14 +733,18 @@ actor GitLabAPIService {
                 withAllowedCharacters: CharacterSet.alphanumerics.union(.init(charactersIn: "-._~"))) ?? $0 }
             .joined(separator: "%2F")
         var lastError: Error = APIError.invalidResponse
-        for attempt in 1...3 {
+        // Two attempts: with statistics, then without. A third identical
+        // attempt would only repeat the second request.
+        for attempt in 1...2 {
             let withStats = attempt == 1
             let queryItems = withStats ? [URLQueryItem(name: "statistics", value: "true")] : []
             do {
                 return try await request("projects/\(encoded)", baseURL: baseURL, token: token,
                                          queryItems: queryItems)
-            } catch APIError.httpError(403) {
-                lastError = APIError.httpError(403)
+            } catch APIError.httpError(let code) where code == 403 || code >= 500 {
+                // 403: statistics restricted to members. 5xx: GitLab timed out
+                // computing them. Either way, retry once without.
+                lastError = APIError.httpError(code)
             } catch {
                 throw error
             }
@@ -500,18 +753,18 @@ actor GitLabAPIService {
     }
 
     func fetchRepository(projectID: Int, baseURL: String, token: String) async throws -> Repository {
-        // Attempt up to 3 times. On a 403 we retry without the statistics param —
+        // Two attempts. On a 403 we retry without the statistics param —
         // some projects/groups restrict statistics to members even when the repo is public.
         // Any non-403 error is surfaced immediately without retrying.
         var lastError: Error = APIError.invalidResponse
-        for attempt in 1...3 {
+        for attempt in 1...2 {
             let withStats = attempt == 1   // only request statistics on the first try
             let queryItems = withStats ? [URLQueryItem(name: "statistics", value: "true")] : []
             do {
                 return try await request("projects/\(projectID)", baseURL: baseURL, token: token,
                                          queryItems: queryItems)
-            } catch APIError.httpError(403) {
-                lastError = APIError.httpError(403)
+            } catch APIError.httpError(let code) where code == 403 || code >= 500 {
+                lastError = APIError.httpError(code)
                 // fall through and retry without statistics
             } catch {
                 throw error
@@ -549,10 +802,10 @@ actor GitLabAPIService {
         token: String,
         page: Int = 1
     ) async throws -> [Commit] {
-        // Attempt up to 3 times. On a 403 retry without with_stats —
+        // Two attempts. On a 403 retry without with_stats —
         // some projects restrict per-commit stats to members.
         var lastError: Error = APIError.invalidResponse
-        for attempt in 1...3 {
+        for attempt in 1...2 {
             var items = [
                 URLQueryItem(name: "per_page", value: "20"),
                 URLQueryItem(name: "page",     value: "\(page)"),
@@ -663,8 +916,7 @@ actor GitLabAPIService {
         var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        let (data, http) = try await send(req)
         guard (200..<300).contains(http.statusCode) else { throw APIError.httpError(http.statusCode) }
 
         // GitLab returns the trace as plain UTF-8 text; fall back to Latin-1 if needed.
@@ -982,8 +1234,7 @@ actor GitLabAPIService {
         return try await request("users/\(userID)/projects", baseURL: baseURL, token: token, queryItems: [
             URLQueryItem(name: "per_page",   value: "100"),
             URLQueryItem(name: "order_by",   value: "last_activity_at"),
-            URLQueryItem(name: "sort",       value: "desc"),
-            URLQueryItem(name: "statistics", value: "true")
+            URLQueryItem(name: "sort",       value: "desc")
         ])
     }
 
@@ -1011,7 +1262,8 @@ actor GitLabAPIService {
 
     @discardableResult
     func unfollowUser(userID: Int, baseURL: String, token: String) async throws -> GitLabUser {
-        return try await post("users/\(userID)/unfollow", baseURL: baseURL, token: token, body: EmptyBody(), method: "DELETE")
+        // GitLab documents unfollow as POST /users/:id/unfollow (not DELETE).
+        return try await post("users/\(userID)/unfollow", baseURL: baseURL, token: token, body: EmptyBody())
     }
 
     func searchUsers(query: String, baseURL: String, token: String) async throws -> [GitLabUser] {
@@ -1047,15 +1299,26 @@ actor GitLabAPIService {
     }
 
     /// Fetches and base64-decodes the repository README.
-    /// Tries the most common README filenames in order; returns `nil` if none exist.
-    /// Never throws — a missing README is not an error.
+    ///
+    /// When `preferredFileName` (derived from the project's `readme_url`) is
+    /// known it is tried first and, on a 404, nothing else is attempted — the
+    /// server has already told us which file is the README.  Without it the
+    /// most common filenames are probed in order.  Never throws — a missing
+    /// README is not an error.  Prefer `RepoContentLoader.readme` which caches
+    /// the result.
     func fetchReadme(
         projectID: Int,
         ref: String,
+        preferredFileName: String? = nil,
         baseURL: String,
         token: String
     ) async -> String? {
-        let candidates = ["README.md", "readme.md", "README", "README.rst", "README.txt"]
+        let candidates: [String]
+        if let preferredFileName, !preferredFileName.isEmpty {
+            candidates = [preferredFileName]
+        } else {
+            candidates = ["README.md", "readme.md", "README", "README.rst", "README.txt"]
+        }
         for candidate in candidates {
             if let file = try? await fetchFileContent(
                 projectID: projectID,
@@ -1086,8 +1349,7 @@ actor GitLabAPIService {
                 URLQueryItem(name: "per_page",   value: "20"),
                 URLQueryItem(name: "page",       value: "\(page)"),
                 URLQueryItem(name: "order_by",   value: "last_activity_at"),
-                URLQueryItem(name: "sort",       value: "desc"),
-                URLQueryItem(name: "statistics", value: "true")
+                URLQueryItem(name: "sort",       value: "desc")
             ]
         )
     }
@@ -1272,16 +1534,45 @@ actor GitLabAPIService {
         )
     }
 
+    private struct MergeBody: Encodable {
+        let squash: Bool
+        let squashCommitMessage: String?
+        let shouldRemoveSourceBranch: Bool
+        enum CodingKeys: String, CodingKey {
+            case squash
+            case squashCommitMessage      = "squash_commit_message"
+            case shouldRemoveSourceBranch = "should_remove_source_branch"
+        }
+    }
+
+    /// Merges a merge request (`PUT /projects/:id/merge_requests/:iid/merge`).
+    ///
+    /// - Parameters:
+    ///   - squash: Combine all source-branch commits into one commit on the target.
+    ///   - squashCommitMessage: Message for that single commit (GitLab defaults
+    ///     to the MR title when nil or empty).
+    ///   - removeSourceBranch: Delete the source branch after merging.
+    /// - Returns: The merged merge request as reported by the server.
     func mergeMergeRequest(
         projectID: Int,
         mrIID: Int,
+        squash: Bool,
+        squashCommitMessage: String? = nil,
+        removeSourceBranch: Bool,
         baseURL: String,
         token: String
-    ) async throws {
-        try await voidPost(
+    ) async throws -> MergeRequest {
+        let message = squashCommitMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await post(
             "projects/\(projectID)/merge_requests/\(mrIID)/merge",
             baseURL: baseURL,
-            token: token
+            token: token,
+            body: MergeBody(
+                squash: squash,
+                squashCommitMessage: (message?.isEmpty ?? true) ? nil : message,
+                shouldRemoveSourceBranch: removeSourceBranch
+            ),
+            method: "PUT"   // GitLab documents merge as PUT; POST answers 405.
         )
     }
 
@@ -1346,20 +1637,17 @@ actor GitLabAPIService {
     ) async throws -> [Repository] {
         // Collect all member repos across pages first
         var allRepos: [Repository] = []
-        for page in 1...maxPages {
-            let page = try await request("projects", baseURL: baseURL, token: token, queryItems: [
-                URLQueryItem(name: "membership",    value: "true"),
-                URLQueryItem(name: "order_by",      value: "last_activity_at"),
-                URLQueryItem(name: "sort",          value: "desc"),
-                URLQueryItem(name: "per_page",      value: "50"),
-                URLQueryItem(name: "page",          value: "\(page)"),
-                URLQueryItem(name: "statistics",    value: "true")
-            ]) as [Repository]
+        for pageNumber in 1...maxPages {
+            let page = try await fetchMemberProjectsPage(
+                perPage: 50, page: pageNumber, baseURL: baseURL, token: token
+            )
             allRepos.append(contentsOf: page)
             if page.count < 50 { break }
         }
 
-        // Concurrently check notification levels and keep only "watch" ones
+        // Concurrently check notification levels and keep only "watch" ones.
+        // The service-level concurrency gate keeps this to a handful of
+        // simultaneous requests even for users with hundreds of member repos.
         return try await withThrowingTaskGroup(of: Repository?.self) { group in
             for repo in allRepos {
                 group.addTask {
@@ -1616,17 +1904,7 @@ actor GitLabAPIService {
         baseURL: String,
         token: String
     ) async throws -> [Repository] {
-        return try await request(
-            "projects",
-            baseURL: baseURL,
-            token: token,
-            queryItems: [
-                URLQueryItem(name: "membership", value: "true"),
-                URLQueryItem(name: "per_page",   value: "100"),
-                URLQueryItem(name: "order_by",   value: "last_activity_at"),
-                URLQueryItem(name: "sort",        value: "desc")
-            ]
-        )
+        try await fetchMemberProjectsPage(perPage: 100, page: 1, baseURL: baseURL, token: token)
     }
 
     // MARK: - Notifications
@@ -1695,15 +1973,7 @@ actor GitLabAPIService {
         let urlString = "\(baseURL)/api/v4/projects/\(projectID)/repository/files/\(encodedPath)?ref=\(encodedRef)"
         guard let url = URL(string: urlString) else { throw APIError.invalidURL }
 
-        var req = URLRequest(url: url)
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-
-        let (data, response) = try await session.data(for: req)
-        guard let httpResponse = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-        guard (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.httpError(httpResponse.statusCode)
-        }
+        let data = try await getData(url: url, token: token)
         return try decoder.decode(FileContent.self, from: data)
     }
 
@@ -1744,8 +2014,7 @@ actor GitLabAPIService {
                 URLQueryItem(name: "search",            value: query),
                 URLQueryItem(name: "search_namespaces", value: "true"),
                 URLQueryItem(name: "order_by",          value: "last_activity_at"),
-                URLQueryItem(name: "per_page",          value: "20"),
-                URLQueryItem(name: "statistics",        value: "true")
+                URLQueryItem(name: "per_page",          value: "20")
             ]
         )
     }
@@ -1772,8 +2041,7 @@ actor GitLabAPIService {
                 URLQueryItem(name: "search_namespaces", value: "true"),
                 URLQueryItem(name: "membership",        value: "true"),
                 URLQueryItem(name: "order_by",          value: "last_activity_at"),
-                URLQueryItem(name: "per_page",          value: "20"),
-                URLQueryItem(name: "statistics",        value: "true")
+                URLQueryItem(name: "per_page",          value: "20")
             ]
         )
     }
@@ -1791,8 +2059,7 @@ actor GitLabAPIService {
             queryItems: [
                 URLQueryItem(name: "topic",      value: topic),
                 URLQueryItem(name: "order_by",   value: "star_count"),
-                URLQueryItem(name: "per_page",   value: "15"),
-                URLQueryItem(name: "statistics", value: "true")
+                URLQueryItem(name: "per_page",   value: "15")
             ]
         )
     }

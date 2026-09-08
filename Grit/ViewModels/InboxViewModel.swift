@@ -55,6 +55,19 @@ final class InboxViewModel: ObservableObject {
     /// How often to re-fetch while the inbox is visible in the foreground.
     static let foregroundPollInterval: Duration = .seconds(60)
 
+    /// Set by `InboxView` on appear / disappear. Drives which poll variant runs.
+    var isVisible = false
+
+    /// When the last full five-list load completed.
+    private var lastFullLoad: Date?
+
+    /// True when the tab is (re)appearing more than one poll interval after
+    /// its last full load — i.e. the lists may be stale enough to catch up now.
+    var shouldRefreshOnAppear: Bool {
+        guard let last = lastFullLoad else { return false }   // initial .task load pending
+        return Date().timeIntervalSince(last) > 60
+    }
+
     /// Running poll loop — cancelled when the inbox leaves the screen or the app backgrounds.
     private var pollingTask: Task<Void, Never>?
 
@@ -113,10 +126,29 @@ final class InboxViewModel: ObservableObject {
             // Sleep first — the initial load is triggered separately via .task { await load() }.
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.foregroundPollInterval)
-                guard !Task.isCancelled else { break }
-                await self?.load()
+                guard !Task.isCancelled, let self else { break }
+                if self.isVisible {
+                    // Five requests, all ETag-revalidated — unchanged lists are 304s.
+                    await self.load()
+                } else {
+                    // Off-screen: one request keeps the badge and banners current;
+                    // the four MR / issue lists wait until the tab is shown again.
+                    await self.loadNotificationsOnly()
+                }
             }
         }
+    }
+
+    /// Fetches just the todo feed and updates badge/banners. Used while the
+    /// Inbox tab is not visible so the other four inbox lists aren't polled.
+    func loadNotificationsOnly() async {
+        guard let token = auth.accessToken else { return }
+        guard let notifs = try? await api.fetchNotifications(baseURL: auth.baseURL, token: token)
+        else { return }
+        notifications = notifs
+        notificationService.unreadCount = unreadCount
+        notificationService.setBadgeCount(unreadCount)
+        await BackgroundRefreshService.shared.processNewNotifications(notifs)
     }
 
     /// Stops the poll loop. Call when the inbox leaves the screen or the app backgrounds.
@@ -178,6 +210,7 @@ final class InboxViewModel: ObservableObject {
         notifications = notifs
         notificationService.unreadCount = unreadCount
         notificationService.setBadgeCount(unreadCount)
+        lastFullLoad = Date()
 
         // Fire system banners for any notifications we haven't delivered yet.
         // This covers the foreground case — background refresh handles the rest.

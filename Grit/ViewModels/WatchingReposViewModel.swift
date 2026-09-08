@@ -8,8 +8,9 @@ final class WatchingReposViewModel: ObservableObject {
     @Published var isLoading: Bool         = false
     @Published var error:     String?
 
-    private let api  = GitLabAPIService.shared
-    private let auth = AuthenticationService.shared
+    private let api   = GitLabAPIService.shared
+    private let auth  = AuthenticationService.shared
+    private let cache = RepoCacheStore.shared
 
     private var lastLoaded: Date?
 
@@ -60,7 +61,14 @@ final class WatchingReposViewModel: ObservableObject {
 
     func load() async {
         guard let token = auth.accessToken else { return }
-        isLoading = true
+        // Building this list costs one `notification_settings` request per
+        // member repository — show the last known list instantly.
+        if repos.isEmpty,
+           let cached: [Repository] = await cache.get(.watchedList, allowStale: true),
+           !cached.isEmpty {
+            repos = cached
+        }
+        isLoading = repos.isEmpty
         error     = nil
         defer { isLoading = false }
 
@@ -114,6 +122,7 @@ final class WatchingReposViewModel: ObservableObject {
 
             repos      = watched
             lastLoaded = Date()
+            await cache.set(watched, for: .watchedList, ttl: RepoCacheStore.watchedListTTL)
             // Keep the background notification service's repo list in sync.
             WatchedRepoNotificationService.persistWatchedRepos(watched)
         } catch {
@@ -122,7 +131,19 @@ final class WatchingReposViewModel: ObservableObject {
     }
 
     func loadIfNeeded() async {
-        guard repos.isEmpty || lastLoaded.map({ Date().timeIntervalSince($0) > 300 }) ?? true
+        if lastLoaded == nil,
+           let cached: (value: [Repository], age: TimeInterval, isFresh: Bool) =
+                await cache.getWithAge(.watchedList, allowStale: true),
+           !cached.value.isEmpty {
+            repos = cached.value
+            if cached.isFresh {
+                // Disk snapshot is within TTL — no need for the per-repo scan yet.
+                lastLoaded = Date().addingTimeInterval(-cached.age)
+                return
+            }
+        }
+        guard repos.isEmpty ||
+              lastLoaded.map({ Date().timeIntervalSince($0) > RepoCacheStore.watchedListTTL }) ?? true
         else { return }
         await load()
     }
@@ -145,6 +166,7 @@ final class WatchingReposViewModel: ObservableObject {
         externalWatchedIDs.insert(repo.id)
         // Invalidate TTL so next loadIfNeeded does a full refresh.
         lastLoaded = nil
+        Task { await cache.invalidate(.watchedList) }
         WatchedRepoNotificationService.persistWatchedRepos(repos)
     }
 
@@ -153,6 +175,7 @@ final class WatchingReposViewModel: ObservableObject {
         repos.removeAll { $0.id == projectID }
         externalWatchedIDs.remove(projectID)
         lastLoaded = nil
+        Task { await cache.invalidate(.watchedList) }
         WatchedRepoNotificationService.persistWatchedRepos(repos)
     }
 }

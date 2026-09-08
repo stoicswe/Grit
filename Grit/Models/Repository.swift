@@ -20,16 +20,22 @@ struct Repository: Codable, Identifiable, Hashable {
     /// Project topics / tags (e.g. ["swift", "ios"]).  Nil when the API
     /// response doesn't include the field (older endpoints, caches, etc.).
     let topics: [String]?
+    /// Web URL of the project's README (e.g. `…/-/blob/main/README.md`).
+    /// Lets the app fetch the README with one request instead of probing
+    /// several candidate filenames.
+    let readmeURL: String?
     /// ISO 8601 date string (e.g. "2024-05-15") set when the project is queued for deletion.
     /// Stored as a raw String because GitLab returns a date-only value that the shared
     /// ISO 8601 datetime decoder would reject.
     let markedForDeletionAt: String?
+    /// Newer name for the same value; `marked_for_deletion_at` is deprecated.
+    let markedForDeletionOn: String?
 
-    var isScheduledForDeletion: Bool { markedForDeletionAt != nil }
+    var isScheduledForDeletion: Bool { markedForDeletionOn != nil || markedForDeletionAt != nil }
 
     /// Parsed deletion date for display purposes.
     var markedForDeletionDate: Date? {
-        guard let s = markedForDeletionAt else { return nil }
+        guard let s = markedForDeletionOn ?? markedForDeletionAt else { return nil }
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -80,6 +86,8 @@ struct Repository: Codable, Identifiable, Hashable {
         case createdAt      = "created_at"
         case lastActivityAt = "last_activity_at"
         case markedForDeletionAt = "marked_for_deletion_at"
+        case markedForDeletionOn = "marked_for_deletion_on"
+        case readmeURL = "readme_url"
         case topics
     }
 

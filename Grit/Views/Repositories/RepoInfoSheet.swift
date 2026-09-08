@@ -52,6 +52,7 @@ struct RepoInfoOverlay: View {
             await viewModel.load(
                 projectID: projectID,
                 ref: repository.defaultBranch ?? "main",
+                readmeURL: repository.readmeURL,
                 pipeline: pipeline
             )
             if let desc = repository.description,

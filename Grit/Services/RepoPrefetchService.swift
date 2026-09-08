@@ -177,63 +177,15 @@ actor RepoPrefetchService {
                             ttl: RepoCacheStore.mrListTTL)
         }
 
-        // Prefetch root tree for the default branch if not already cached
+        // Prefetch the root tree for the default branch if not already cached
+        // (cache-first; coalesced with any concurrent request for the same tree).
         if let branch = selectedBranch {
-            let treeKey = CacheKey.rootTree(projectID: projectID, ref: branch)
-            let existingTree: [RepositoryFile]? = await cache.get(treeKey)
-            if existingTree == nil,
-               let tree = try? await api.fetchRepositoryTree(
-                    projectID: projectID, path: "", ref: branch,
-                    baseURL: baseURL, token: token
-               ) {
-                let sorted = tree.sorted {
-                    if $0.isDirectory != $1.isDirectory { return $0.isDirectory }
-                    return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-                }
-                await cache.set(sorted, for: treeKey, ttl: RepoCacheStore.rootTreeTTL)
-            }
+            _ = await RepoContentLoader.rootTree(
+                projectID: projectID, ref: branch, allowStale: false,
+                baseURL: baseURL, token: token
+            )
         }
 
         lastPrefetched[projectID] = Date()
-    }
-
-    // MARK: - Root Tree Background Checker
-
-    /// Checks every repo in the user's list for top-level file/folder changes and
-    /// silently updates the cache when entries are added, removed, or renamed.
-    ///
-    /// Called at background priority so it never interferes with user interaction.
-    func checkRootTreesForUpdates(repos: [Repository]) async {
-        let (isAuth, token, baseURL) = await MainActor.run {
-            (auth.isAuthenticated, auth.accessToken, auth.baseURL)
-        }
-        guard isAuth, let token else { return }
-
-        for repo in repos {
-            guard let branch = repo.defaultBranch else { continue }
-            let treeKey = CacheKey.rootTree(projectID: repo.id, ref: branch)
-
-            // Only check repos that have a cached root tree
-            guard let cached: [RepositoryFile] = await cache.get(treeKey, allowStale: true)
-            else { continue }
-
-            guard let fresh = try? await api.fetchRepositoryTree(
-                projectID: repo.id, path: "", ref: branch,
-                baseURL: baseURL, token: token
-            ) else { continue }
-
-            let freshSorted = fresh.sorted {
-                if $0.isDirectory != $1.isDirectory { return $0.isDirectory }
-                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-
-            // Update cache only when the listing has actually changed
-            if freshSorted.map(\.id) != cached.map(\.id) {
-                await cache.set(freshSorted, for: treeKey, ttl: RepoCacheStore.rootTreeTTL)
-            }
-
-            // Yield between repos to avoid monopolising the background executor
-            await Task.yield()
-        }
     }
 }

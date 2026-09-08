@@ -48,6 +48,13 @@ struct InboxView: View {
             }
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                viewModel.isVisible = true
+                // Coming back to the tab after a while — catch up immediately
+                // rather than waiting for the next poll tick.
+                if viewModel.shouldRefreshOnAppear { Task { await viewModel.load() } }
+            }
+            .onDisappear { viewModel.isVisible = false }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {

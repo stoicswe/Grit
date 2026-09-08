@@ -16,6 +16,7 @@ struct MergeRequestDetailView: View {
     @State private var showAISheet      = false
     @State private var showDiff         = false
     @State private var showComposer     = false
+    @State private var showMergeOptions = false
     @State private var replyToNote:     MRNote? = nil
     @State private var selectedPipeline: Pipeline? = nil
 
@@ -90,6 +91,17 @@ struct MergeRequestDetailView: View {
             activity.targetContentIdentifier = "mr-\(mr.id)"
             let entity = MergeRequestEntity(from: liveMR)
             activity.appEntityIdentifier = EntityIdentifier(for: entity)
+        }
+        .sheet(isPresented: $showMergeOptions) {
+            MergeOptionsSheet(
+                mr: liveMR,
+                suggestMessage: aiService.isUserEnabled
+                    ? { await viewModel.suggestSquashCommitMessage() }
+                    : nil
+            ) { options in
+                showMergeOptions = false
+                Task { await viewModel.merge(projectID: projectID, mrIID: mr.iid, options: options) }
+            }
         }
         .sheet(isPresented: $showAISheet) {
             AIResponseSheet(
@@ -594,7 +606,7 @@ struct MergeRequestDetailView: View {
 
         return Button {
             guard canAct else { return }
-            Task { await viewModel.merge(projectID: projectID, mrIID: mr.iid) }
+            showMergeOptions = true
         } label: {
             HStack(spacing: 10) {
                 if viewModel.isMerging {
@@ -1110,5 +1122,185 @@ private extension View {
         } else {
             self
         }
+    }
+}
+
+// MARK: - Merge Options Sheet
+
+/// Confirmation step before merging: lets the user squash the source-branch
+/// commits into one, give that commit a message, and choose whether the
+/// source branch is deleted. Defaults mirror the MR / project settings that
+/// GitLab reports (`squash_on_merge`, `force_remove_source_branch`).
+struct MergeOptionsSheet: View {
+    let mr: MergeRequest
+    /// Apple Intelligence drafting hook; `nil` when the assistant is disabled.
+    let suggestMessage: (() async -> String?)?
+    let onMerge: (MergeRequestViewModel.MergeOptions) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var squash: Bool
+    @State private var removeSourceBranch: Bool
+    @State private var squashMessage = ""
+    @State private var isSuggesting = false
+    @State private var didAutoSuggest = false
+    @State private var suggestionTask: Task<Void, Never>?
+
+    /// Project settings delete the source branch regardless of the toggle.
+    private let removalForced: Bool
+
+    init(mr: MergeRequest,
+         suggestMessage: (() async -> String?)? = nil,
+         onMerge: @escaping (MergeRequestViewModel.MergeOptions) -> Void) {
+        self.mr             = mr
+        self.suggestMessage = suggestMessage
+        self.onMerge        = onMerge
+        removalForced = mr.forceRemoveSourceBranch ?? false
+        _squash = State(initialValue: mr.squashOnMerge ?? mr.squash ?? false)
+        _removeSourceBranch = State(initialValue: removalForced || (mr.shouldRemoveSourceBranch ?? false))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing: 8) {
+                        branchChip(mr.sourceBranch)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        branchChip(mr.targetBranch)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if let changes = mr.changesCount {
+                        Label("\(changes) changed files", systemImage: "doc.text")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section {
+                    Toggle(isOn: $squash.animation(.easeInOut(duration: 0.2))) {
+                        Label("Squash commits", systemImage: "arrow.triangle.merge")
+                    }
+                    if squash {
+                        TextField("Squash commit message", text: $squashMessage, axis: .vertical)
+                            .lineLimit(2...6)
+                            .disabled(isSuggesting)
+                            .opacity(isSuggesting ? 0.5 : 1)
+                        if suggestMessage != nil {
+                            suggestionRow
+                        }
+                    }
+                } header: {
+                    Text("Commits")
+                } footer: {
+                    if squash {
+                        Text("All commits from \(mr.sourceBranch) are combined into a single commit on \(mr.targetBranch). Leave the message empty to use the merge request title.")
+                    } else {
+                        Text("Every commit from \(mr.sourceBranch) is kept in the history of \(mr.targetBranch).")
+                    }
+                }
+
+                Section {
+                    Toggle(isOn: $removeSourceBranch) {
+                        Label("Delete source branch", systemImage: "trash")
+                    }
+                    .disabled(removalForced)
+                } header: {
+                    Text("Source branch")
+                } footer: {
+                    if removalForced {
+                        Text("The project's settings delete the source branch after merging.")
+                    }
+                }
+
+                Section {
+                    Button {
+                        onMerge(.init(
+                            squash: squash,
+                            squashCommitMessage: squash ? squashMessage : nil,
+                            removeSourceBranch: removeSourceBranch
+                        ))
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.triangle.merge")
+                            Text(squash ? "Squash and Merge" : "Merge")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+            }
+            .navigationTitle("Merge !\(mr.iid)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        // Draft a message automatically the first time the sheet opens with
+        // squash on; afterwards the user can regenerate or edit freely.
+        .onChange(of: squash, initial: true) { _, isOn in
+            guard isOn, !didAutoSuggest, suggestMessage != nil, squashMessage.isEmpty else { return }
+            didAutoSuggest = true
+            runSuggestion()
+        }
+        .onDisappear { suggestionTask?.cancel() }
+    }
+
+    /// Apple Intelligence row: shows progress while drafting, otherwise a
+    /// button to (re)generate the message.
+    private var suggestionRow: some View {
+        Button {
+            runSuggestion()
+        } label: {
+            HStack(spacing: 8) {
+                if isSuggesting {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Drafting with Apple Intelligence…")
+                } else {
+                    Image(systemName: "sparkles")
+                    Text(squashMessage.isEmpty ? "Suggest with Apple Intelligence" : "Regenerate suggestion")
+                }
+            }
+            .font(.subheadline)
+        }
+        .disabled(isSuggesting)
+    }
+
+    private func runSuggestion() {
+        guard let suggestMessage, !isSuggesting else { return }
+        suggestionTask?.cancel()
+        isSuggesting = true
+        suggestionTask = Task {
+            let draft = await suggestMessage()
+            guard !Task.isCancelled else { return }
+            if let draft, !draft.isEmpty {
+                withAnimation(.easeInOut(duration: 0.2)) { squashMessage = draft }
+            }
+            isSuggesting = false
+        }
+    }
+
+    private func branchChip(_ name: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 10, weight: .semibold))
+            Text(name)
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.accentColor.opacity(0.12), in: Capsule())
+        .foregroundStyle(Color.accentColor)
     }
 }

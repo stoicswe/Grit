@@ -108,15 +108,20 @@ struct RepositoryDetailView: View {
 
             // Fetch AI context (README + top-level tree) in the background.
             // Non-blocking and best-effort — failures are silently ignored.
-            guard let branch = viewModel.selectedBranch,
+            // Only worth doing when the AI assistant is actually enabled, and
+            // both values come from the shared cache (the Info tab and file
+            // browser want the same data).
+            guard AIAssistantService.shared.isUserEnabled,
+                  let branch = viewModel.selectedBranch,
                   let token  = AuthenticationService.shared.accessToken else { return }
-            let api     = GitLabAPIService.shared
-            let baseURL = AuthenticationService.shared.baseURL
-            let projID  = repository.id
-            async let readme   = api.fetchReadme(
+            let baseURL   = AuthenticationService.shared.baseURL
+            let projID    = repository.id
+            let readmeURL = viewModel.repository?.readmeURL ?? repository.readmeURL
+            async let readme   = RepoContentLoader.readme(
+                projectID: projID, ref: branch, readmeURL: readmeURL,
+                baseURL: baseURL, token: token)
+            async let topLevel = RepoContentLoader.rootTree(
                 projectID: projID, ref: branch, baseURL: baseURL, token: token)
-            async let topLevel = try? api.fetchRepositoryTree(
-                projectID: projID, path: "", ref: branch, baseURL: baseURL, token: token)
             navState.setRepositoryAIContext(readme: await readme, topLevel: await topLevel)
         }
         .onDisappear {
@@ -187,7 +192,7 @@ struct RepositoryDetailView: View {
         .overlay {
             if showRepoInfo {
                 RepoInfoOverlay(
-                    repository:    repository,
+                    repository:    viewModel.repository ?? repository,
                     projectID:     repository.id,
                     pipeline:      viewModel.defaultBranchPipeline,
                     onPipelineTap: viewModel.defaultBranchPipeline != nil ? {
@@ -402,7 +407,7 @@ struct RepositoryDetailView: View {
         switch selectedTab {
         case .info:
             RepoInfoTabView(
-                repository: repository,
+                repository: viewModel.repository ?? repository,
                 branch: viewModel.selectedBranch ?? repository.defaultBranch ?? "main"
             )
             .padding(.horizontal)

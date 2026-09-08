@@ -414,9 +414,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Apple Intelligence")
                             .font(.system(size: 15))
-                        Text(AIAssistantService.shared.isAvailable
-                             ? "On-device · Private"
-                             : "Not available on this device")
+                        Text(AIAssistantService.shared.routingDescription)
                             .font(.caption)
                             .foregroundStyle(AIAssistantService.shared.isAvailable ? .green : .secondary)
                     }
@@ -434,6 +432,8 @@ struct SettingsView: View {
         } footer: {
             if !AIAssistantService.shared.isAvailable {
                 Text("Apple Intelligence requires iPhone 16 or later running iOS 18.1 or later.")
+            } else if AIAssistantService.shared.cloudModelAvailable {
+                Text("Quick tasks such as summaries run on-device. In-depth work — merge request reviews, commit explanations, large files, and squash-commit drafts — uses Apple's more capable model on Private Cloud Compute, which processes requests on Apple silicon servers with Apple Intelligence's privacy guarantees and never stores them.")
             } else if settingsStore.appleIntelligenceEnabled {
                 Text("AI-powered features — commit explanations, code review, and the AI chat panel — are active. All processing runs entirely on-device.")
             } else {

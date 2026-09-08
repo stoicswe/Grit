@@ -49,18 +49,18 @@ struct ActivityView: View {
                                 description: Text(errorMessage)
                             )
                             Button("Retry") {
-                                Task { await viewModel.load() }
+                                Task { await viewModel.load(force: true) }
                             }
                             .buttonStyle(.bordered)
                         }
                         .padding()
                     }
-                    .refreshable { await viewModel.load() }
+                    .refreshable { await viewModel.load(force: true) }
                 } else {
                     ScrollView {
                         emptyState
                     }
-                    .refreshable { await viewModel.load() }
+                    .refreshable { await viewModel.load(force: true) }
                 }
             } else {
                 activityList
@@ -184,7 +184,7 @@ struct ActivityView: View {
             }
         }
         .listStyle(.plain)
-        .refreshable { await viewModel.load() }
+        .refreshable { await viewModel.load(force: true) }
     }
 
     // MARK: - Tap Handler

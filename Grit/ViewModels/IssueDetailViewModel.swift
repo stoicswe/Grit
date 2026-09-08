@@ -54,62 +54,71 @@ final class IssueDetailViewModel: ObservableObject {
         error = nil
         defer { isLoadingNotes = false }
 
-        // Fetch notes, detail, current user, child tasks, emojis, and project labels all in parallel
+        let baseURL = auth.baseURL
+
+        // The signed-in user is already known — avoid a `/user` round-trip per open.
+        let userID: Int
+        if let id = auth.currentUser?.id {
+            userID = id
+        } else if let id = (try? await api.fetchCurrentUser(baseURL: baseURL, token: token))?.id {
+            userID = id
+        } else {
+            return
+        }
+        currentUserID = userID
+
+        // Fetch notes, detail, child tasks, emojis, and (cached) project labels in parallel
         async let notesTask       = api.fetchIssueNotes(
             projectID: projectID, issueIID: issue.iid,
-            baseURL: auth.baseURL, token: token
+            baseURL: baseURL, token: token
         )
         async let detailTask      = api.fetchIssue(
             projectID: projectID, issueIID: issue.iid,
-            baseURL: auth.baseURL, token: token
+            baseURL: baseURL, token: token
         )
-        async let userTask        = api.fetchCurrentUser(baseURL: auth.baseURL, token: token)
         async let childTasksTask  = api.fetchIssueLinkedTasks(
             projectID: projectID, issueIID: issue.iid,
-            baseURL: auth.baseURL, token: token
+            baseURL: baseURL, token: token
         )
         async let emojisTask      = api.fetchAwardEmojis(
             projectID: projectID, issueIID: issue.iid,
-            baseURL: auth.baseURL, token: token
+            baseURL: baseURL, token: token
         )
-        async let labelsTask      = api.fetchProjectLabels(
-            projectID: projectID,
-            baseURL:   auth.baseURL,
-            token:     token
+        async let labelsTask      = ProjectAccessCache.labels(
+            projectID: projectID, baseURL: baseURL, token: token
         )
 
         do {
-            let (fetched, detail, user) = try await (notesTask, detailTask, userTask)
+            let (fetched, detail) = try await (notesTask, detailTask)
             notes            = fetched
             isSubscribed     = detail.subscribed ?? false
             isOpen           = detail.isOpen
             liveDescription  = detail.description
             liveLabelDetails = detail.labelDetails
-            currentUserID    = user.id
             childTasks       = (try? await childTasksTask) ?? []
 
             // Seed vote counts and current-user emoji IDs
             upvotes   = detail.upvotes
             downvotes = detail.downvotes
             let emojis = (try? await emojisTask) ?? []
-            myUpvoteID   = emojis.first(where: { $0.name == "thumbsup"   && $0.user.id == user.id })?.id
-            myDownvoteID = emojis.first(where: { $0.name == "thumbsdown" && $0.user.id == user.id })?.id
+            myUpvoteID   = emojis.first(where: { $0.name == "thumbsup"   && $0.user.id == userID })?.id
+            myDownvoteID = emojis.first(where: { $0.name == "thumbsdown" && $0.user.id == userID })?.id
 
-            availableLabels = (try? await labelsTask) ?? []
+            availableLabels = await labelsTask
 
             // Determine close permission:
             // Author and assignees can always close their own issues.
-            let isAuthor   = detail.author.id == user.id
-            let isAssignee = detail.assignees.contains { $0.id == user.id }
+            let isAuthor   = detail.author.id == userID
+            let isAssignee = detail.assignees.contains { $0.id == userID }
             if isAuthor || isAssignee {
                 canCloseIssue = true
             } else {
-                // Fall back to project membership level (Reporter = 20, Developer = 30, …)
-                let member = try? await api.fetchProjectMemberSelf(
-                    projectID: projectID, userID: user.id,
-                    baseURL: auth.baseURL, token: token
+                // Fall back to the (cached) project membership level
+                // (Reporter = 20, Developer = 30, …)
+                let level = await ProjectAccessCache.accessLevel(
+                    projectID: projectID, userID: userID, baseURL: baseURL, token: token
                 )
-                canCloseIssue = (member?.accessLevel ?? 0) >= 20
+                canCloseIssue = (level ?? 0) >= 20
             }
         } catch {
             self.error = error.localizedDescription

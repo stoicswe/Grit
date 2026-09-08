@@ -12,6 +12,16 @@ struct ProfileView: View {
                 VStack(spacing: 20) {
                     if viewModel.isLoading && viewModel.user == nil {
                         loadingView
+                    } else if viewModel.user == nil, let error = viewModel.error {
+                        ContentUnavailableView {
+                            Label("Couldn't Load Profile", systemImage: "person.crop.circle.badge.exclamationmark")
+                        } description: {
+                            Text(error)
+                        } actions: {
+                            Button("Retry") { Task { await viewModel.load(force: true) } }
+                                .buttonStyle(.bordered)
+                        }
+                        .padding(.top, 60)
                     } else if let user = viewModel.user {
                         profileHeader(user)
 
@@ -60,7 +70,7 @@ struct ProfileView: View {
             }
         }
         .onAppear { Task { await viewModel.load() } }
-        .refreshable { await viewModel.load() }
+        .refreshable { await viewModel.load(force: true) }
     }
 
     // MARK: - Subviews
