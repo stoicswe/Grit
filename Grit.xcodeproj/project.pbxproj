@@ -235,7 +235,7 @@
 		754DAC11445F6661CBC2BE11 /* ProfileQRSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileQRSheet.swift; sourceTree = "<group>"; };
 		779DFF32A256A3CD7F9BE7AE /* SignatureVerificationChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignatureVerificationChip.swift; sourceTree = "<group>"; };
 		78BB50A5077F82633797A0F4 /* PublicProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicProfileView.swift; sourceTree = "<group>"; };
-		79263D3601FB68CA089390DA /* GritWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = GritWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		79263D3601FB68CA089390DA /* GritWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GritWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		7AC0034568398F8322038ED8 /* ExploreViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreViewModel.swift; sourceTree = "<group>"; };
 		7C302B48DFAE3703CE4ED8C1 /* GitLabIssue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitLabIssue.swift; sourceTree = "<group>"; };
 		7EADF736DB316A2AE2E2FA92 /* GitLabGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitLabGroup.swift; sourceTree = "<group>"; };
@@ -269,7 +269,7 @@
 		B0ECB34A910EAC6AC26CA025 /* FileBrowserViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileBrowserViewModel.swift; sourceTree = "<group>"; };
 		B1AC94E4EB72331D4F813F0A /* NotificationTargetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationTargetView.swift; sourceTree = "<group>"; };
 		B6ADDC24C59B1BCDBC776DDB /* CodeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeEditorView.swift; sourceTree = "<group>"; };
-		B8AC649B5E133CBB869E7373 /* Grit.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Grit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B8AC649B5E133CBB869E7373 /* Grit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Grit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BDC66813EE7FAD373069161B /* RepoPrefetchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoPrefetchService.swift; sourceTree = "<group>"; };
 		BEB2C964BAEBECEB1476ECB9 /* Grit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Grit.storekit; sourceTree = "<group>"; };
 		BEF165E7AD059805B5CDCC9B /* PipelineJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineJob.swift; sourceTree = "<group>"; };
@@ -1008,7 +1008,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2026.0908.1540;
+				CURRENT_PROJECT_VERSION = 2026.0910.1418;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = P22P7U46RW;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -1064,6 +1064,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Grit/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Grit;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1109,7 +1111,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2026.0908.1540;
+				CURRENT_PROJECT_VERSION = 2026.0910.1418;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = P22P7U46RW;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1155,6 +1157,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = Grit/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Grit;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1173,6 +1177,7 @@
 				CODE_SIGN_ENTITLEMENTS = GritWidget/GritWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = GritWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Grit;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1191,6 +1196,7 @@
 				CODE_SIGN_ENTITLEMENTS = GritWidget/GritWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = GritWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Grit;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
