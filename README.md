@@ -1,5 +1,13 @@
 ![Xcode Cloud](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/stoicswe/8fc6bd69237f5d505ced66c91f95dc14/raw/grit-build.json) [![CodeQL](https://github.com/stoicswe/Grit/actions/workflows/codeql.yml/badge.svg)](https://github.com/stoicswe/Grit/actions/workflows/codeql.yml)
 
+
+<p align="left">
+  <a href="https://apps.apple.com/us/app/grit-for-gitlab/id6761450099">
+    <img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us?releaseDate=1787875200" alt="Download on the Mac App Store" height="56" />
+  </a>
+  &nbsp;&nbsp;
+</p>
+
 # Grit
 
 A native iOS GitLab client built with SwiftUI. Grit aims to provide a way to browse repositories, review merge requests, track pipelines, and monitor your GitLab workflow from an iPhone. Issues can be created and commented on as well, bringing together a collective set of management features to help in a pinch for when you're out and about.
